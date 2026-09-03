@@ -22,9 +22,10 @@
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | 🤖 Автоинструкции для агентов |
 | [`docs/agent-instructions/`](docs/agent-instructions/000-README.md) | 📚 Полный набор инструкций |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 🏗️ Архитектура проекта |
 | [`deploy/`](deploy/) | 🚀 Скрипты установки/обновления сервера |
 | [`deploy/github-actions/deploy.yml.example`](deploy/github-actions/deploy.yml.example) | ⚙️ Шаблон авто-деплоя GitHub → сервер |
-| `src/` | 🧩 Код браузера (развивается) |
+| [`src/octopus_browser/`](src/octopus_browser/) | 🧩 Код браузера (Python + Playwright + FastAPI) |
 
 ---
 
@@ -44,14 +45,23 @@
 - 🔑 Требуемые Secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`.
 - 🧲 Fallback: на сервере — watchdog (cron), который сам подтягивает изменения.
 
+## 🧪 Быстрый старт
+
+```bash
+make install   # зависимости + браузер
+make test      # smoke-тесты
+make run       # API на :8090 -> http://localhost:8090/docs
+```
+
 ---
 
 ## 🛠️ Статус
 
 - ✅ Инструкции агентов: готово
-- ⬜ Ядро браузера: в разработке
+- ✅ Каркас проекта: конфиг, профили, сессии, cookies, прокси/VPN, vision, агент, API
+- ⬜ Реальные прокси/VPN-провайдеры
 - ⬜ Интеграция с Октопусом/AIOS: планируется
-- ⬜ Авто-деплой: настроен в репозитории (нужны Secrets)
+- ⬜ Авто-деплой: шаблон готов (нужны Secrets + активация workflow)
 
 ---
 

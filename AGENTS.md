@@ -36,7 +36,8 @@
 | `docs/agent-instructions/` | 📚 Все инструкции для агентов (общие, GitHub-плагин, деплой) |
 | `deploy/` | 🚀 Скрипты установки и обновления на сервере |
 | `deploy/github-actions/` | ⚙️ Шаблон workflow авто-деплоя (активируется копированием в `.github/workflows/`) |
-| `src/` | 🧩 Код браузера (появляется по мере разработки) |
+| `src/octopus_browser/` | 🧩 Код браузера: профили, сессии, cookies, прокси/VPN, vision, агент, API |
+| `docs/ARCHITECTURE.md` | 🏗️ Архитектура и модули |
 
 ---
 
@@ -83,3 +84,4 @@
 - [ChatGPT + GitHub интеграция](docs/agent-instructions/003-GITHUB-CHATGPT.md)
 - [Установка и деплой на сервер](docs/agent-instructions/004-DEPLOY.md)
 - [Шаблон ответа агента](docs/agent-instructions/TEMPLATE.md)
+- [Архитектура проекта](docs/ARCHITECTURE.md)
