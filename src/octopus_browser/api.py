@@ -13,15 +13,13 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from octopus_browser.config import AppConfig
-from octopus_browser.cookies import CookieManager
 from octopus_browser.profiles import ProfileManager
 from octopus_browser.sessions import SessionManager
 
 app = FastAPI(
     title="🐙 Octopus Browser API",
     version="0.1.0",
-    description="Супербезопасный браузер с ИИ-управлением (адаптер Октопус/AIOS)
-",
+    description="Супербезопасный браузер с ИИ-управлением (адаптер Октопус/AIOS)",
 )
 
 config = AppConfig()
@@ -161,8 +159,7 @@ def import_cookies(payload: dict[str, Any]) -> dict:
 def navigate(data: NavigateIn) -> dict:
     from octopus_browser.core.launcher import BrowserController
 
-    profile_dir = profiles.get(data.profile)
-    controller = BrowserController(config, profile_dir=profile_dir)
+    controller = BrowserController(config, profile_dir=profiles.get(data.profile))
     try:
         controller.start()
         controller.goto(data.url)
