@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -45,6 +46,9 @@ class NavigateIn(BaseModel):
     @field_validator("url")
     @classmethod
     def validate_url(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("url должен быть абсолютным http/https URL")
         return value
 
     @field_validator("profile")
