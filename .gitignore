@@ -29,6 +29,14 @@ out/
 coverage/
 *.log
 *.tmp
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# 📦 Runtime data
+/data/
 
 # 🛠️ OS / IDE
 .DS_Store

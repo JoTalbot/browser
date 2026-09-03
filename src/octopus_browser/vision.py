@@ -15,7 +15,6 @@ from octopus_browser.config import AppConfig
 
 log = logging.getLogger("octopus.vision")
 
-# 🤖 Действия, которые умеет исполнять BrowserController
 ACTIONS = {"goto", "click", "fill", "scroll", "wait", "new_tab", "close_tab", "done"}
 
 
@@ -34,7 +33,6 @@ class VisionEngine:
 
     def __init__(self, config: AppConfig, describe_fn: Optional[Callable[[str], str]] = None):
         self.config = config
-        # 💡 describe_fn можно внедрить для тестов/локальных моделей
         self._describe_fn = describe_fn
 
     def describe(self, image_b64: str) -> str:
@@ -43,38 +41,38 @@ class VisionEngine:
             return self._describe_fn(image_b64)
         if not self.config.vision_api_url or not self.config.vision_api_key:
             return "Vision API не настроена — анализатор в режиме заглушки"
-        return self._call_llm(image_b64)
+        return self._call_llm("Опиши содержимое скриншота кратко и структурированно.", image_b64)
 
     def decide(self, image_b64: str, goal: str, history: list[str]) -> VisionDecision:
-        """Принять решение: следующее действие для достижения цели.
-
-        🔒 Безопасность: возвращает только действия из whitelist ACTIONS.
-        """
+        """Принять решение: следующее действие для достижения цели."""
         description = self.describe(image_b64)
-        if self._describe_fn is None:
-            # режим заглушки: сообщаем статус, дальнейшее — на исполнителя
+        if not self.config.vision_api_url or not self.config.vision_api_key:
             return VisionDecision(action="wait", reason=description)
 
         plan = self._call_llm(
             prompt=(
-                f"Цель: {goal}\nКадр: {description}\nИстория: {history[-3:]}\n"
-                "Верни JSON: {\"action\": \"goto|click|fill|scroll|wait|done\", "
-                "\"target\": \"...\", \"text\": \"...\", \"reason\": \"...\"}"
+                f"Цель: {goal}\nКраткое описание кадра: {description}\n"
+                f"История: {history[-3:]}\n"
+                "Выбери одно действие из: goto, click, fill, scroll, wait, new_tab, "
+                "close_tab, done. Верни ТОЛЬКО JSON: "
+                '{"action":"...","target":"...","text":"...","reason":"..."}'
             ),
-            image=None,
+            image=image_b64,
         )
         try:
             raw = json.loads(plan)
             action = raw.get("action", "wait")
             if action not in ACTIONS:
                 action = "wait"
-            return VisionDecision(action=action, target=str(raw.get("target", "")),
-                                  text=str(raw.get("text", "")),
-                                  reason=str(raw.get("reason", "")))
-        except (ValueError, TypeError):
+            return VisionDecision(
+                action=action,
+                target=str(raw.get("target", "")),
+                text=str(raw.get("text", "")),
+                reason=str(raw.get("reason", "")),
+            )
+        except (ValueError, TypeError, json.JSONDecodeError):
             return VisionDecision(action="wait", reason="Не удалось распарсить план")
 
-    # ---- internal --------------------------------------------------------
     def _call_llm(self, prompt: str, image: Optional[str] = None) -> str:
         """Вызов OpenAI-совместимого vision API (chat/completions)."""
         import httpx  # noqa: PLC0415
@@ -87,11 +85,17 @@ class VisionEngine:
         if image:
             payload["messages"][0]["content"] = [
                 {"type": "text", "text": prompt},
-                {"type": "image_url",
-                 "image_url": {"url": f"data:image/png;base64,{image}"}},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
             ]
-        resp = httpx.post(f"{self.config.vision_api_url}/chat/completions",
-                          headers=headers, json=payload, timeout=60)
+        resp = httpx.post(
+            f"{self.config.vision_api_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60,
+        )
         resp.raise_for_status()
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
+        if not isinstance(content, str):
+            raise ValueError("Vision API вернула неподдерживаемый формат content")
+        return content

@@ -6,14 +6,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from octopus_browser.config import AppConfig
-from octopus_browser.cookies import CookieManager
 from octopus_browser.profiles import ProfileManager
 from octopus_browser.sessions import SessionManager
 
@@ -23,14 +22,12 @@ app = FastAPI(
     description="Супербезопасный браузер с ИИ-управлением (адаптер Октопус/AIOS)",
 )
 
-# ⚙️ Состояние (singleton-конфигурация; расширяется DI-слоем)
 config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
 sessions = SessionManager(config)
 
 
-# ---- Pydantic-модели ----------------------------------------------------
 class ProfileIn(BaseModel):
     name: Optional[str] = Field(default=None, max_length=64)
 
@@ -63,14 +60,31 @@ class NavigateIn(BaseModel):
     url: str
     profile: str = "main"
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("url должен быть абсолютным http/https URL")
+        return value
+
+    @field_validator("profile")
+    @classmethod
+    def validate_profile(cls, value: str) -> str:
+        return ProfileManager.validate_name(value)
+
 
 class AgentTaskIn(BaseModel):
-    task: str
+    task: str = Field(min_length=1, max_length=4000)
     profile: str = "main"
     max_steps: Optional[int] = Field(default=None, ge=1, le=100)
 
+    @field_validator("profile")
+    @classmethod
+    def validate_profile(cls, value: str) -> str:
+        return ProfileManager.validate_name(value)
 
-# ---- Health / meta ------------------------------------------------------
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "octopus-browser", "version": app.version}
@@ -78,17 +92,14 @@ def health() -> dict:
 
 @app.get("/octopus/info")
 def octopus_info() -> dict:
-    """🐙 Адаптер: метаданные для интеграции с Октопусом/AIOS."""
     return {
         "adapter": "octopus-browser",
         "version": app.version,
-        "capabilities": ["profiles", "sessions", "cookies", "proxy", "vpn",
-                         "navigation", "vision", "agent"],
+        "capabilities": ["profiles", "sessions", "cookies", "proxy", "vpn", "navigation", "vision", "agent"],
         "octopus": {"runtime": "AIOS", "module": "browser-adapter"},
     }
 
 
-# ---- Profiles -----------------------------------------------------------
 @app.get("/profiles")
 def list_profiles() -> List[dict]:
     return profiles.list()
@@ -96,18 +107,26 @@ def list_profiles() -> List[dict]:
 
 @app.post("/profiles", response_model=CreateProfileOut, status_code=201)
 def create_profile(data: ProfileIn) -> dict:
-    meta = profiles.create(data.name)
+    try:
+        meta = profiles.create(data.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
     return {"name": meta["name"], "dir": meta["dir"]}
 
 
 @app.delete("/profiles/{name}")
 def delete_profile(name: str) -> dict:
-    if not profiles.delete(name):
+    try:
+        deleted = profiles.delete(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not deleted:
         raise HTTPException(404, f"Профиль '{name}' не найден")
     return {"deleted": name}
 
 
-# ---- Sessions -----------------------------------------------------------
 @app.get("/sessions")
 def list_sessions() -> List[dict]:
     return sessions.list()
@@ -115,33 +134,32 @@ def list_sessions() -> List[dict]:
 
 @app.post("/sessions", response_model=SessionOut, status_code=201)
 def save_session(data: SessionIn) -> dict:
-    sid = sessions.save(data.storage_state, data.profile, data.label)
+    try:
+        ProfileManager.validate_name(data.profile)
+        sid = sessions.save(data.storage_state, data.profile, data.label)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return {"id": sid}
 
 
-# ---- Cookies ------------------------------------------------------------
 @app.post("/cookies/import")
 def import_cookies(payload: dict[str, Any]) -> dict:
-    """Импорт cookies: {"data": "<json>"} или {"cookies": [...]}."""
     raw = payload.get("data") or payload.get("cookies")
     if not raw:
         raise HTTPException(400, "Ожидаются 'data' или 'cookies'")
-    # Валидация формата без запуска браузера
-    import json as _json  # noqa: PLC0415
+    import json as _json
     try:
         _json.loads(raw if isinstance(raw, str) else _json.dumps(raw))
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Некорректный JSON") from exc
     return {"ok": True, "note": "Импорт применяется при старте профиля"}
 
 
-# ---- Browser (требует запущенного контекста) ----------------------------
 @app.post("/navigate")
 def navigate(data: NavigateIn) -> dict:
-    from octopus_browser.core.launcher import BrowserController  # noqa: PLC0415
+    from octopus_browser.core.launcher import BrowserController
 
-    profile_dir = profiles.get(data.profile)
-    controller = BrowserController(config, profile_dir=profile_dir)
+    controller = BrowserController(config, profile_dir=profiles.get(data.profile))
     try:
         controller.start()
         controller.goto(data.url)
@@ -152,23 +170,21 @@ def navigate(data: NavigateIn) -> dict:
 
 @app.post("/screenshot")
 def screenshot(data: NavigateIn) -> dict:
-    from octopus_browser.core.launcher import BrowserController  # noqa: PLC0415
+    from octopus_browser.core.launcher import BrowserController
 
     controller = BrowserController(config, profile_dir=profiles.get(data.profile))
     try:
         controller.start()
-        if data.url:
-            controller.goto(data.url)
+        controller.goto(data.url)
         return {"image_base64": controller.screenshot()}
     finally:
         controller.stop()
 
 
-# ---- Agent --------------------------------------------------------------
 @app.post("/agent/run")
 def agent_run(data: AgentTaskIn) -> dict:
-    from octopus_browser.agent import OctopusAgent  # noqa: PLC0415
-    from octopus_browser.core.launcher import BrowserController  # noqa: PLC0415
+    from octopus_browser.agent import OctopusAgent
+    from octopus_browser.core.launcher import BrowserController
 
     controller = BrowserController(config, profile_dir=profiles.get(data.profile))
     agent = OctopusAgent(config, controller)

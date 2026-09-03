@@ -23,7 +23,7 @@ class AgentRun:
 
     task: str
     steps: int = 0
-    status: str = "idle"  # idle | running | done | error
+    status: str = "idle"  # idle | running | done | limit | error
     log: List[str] = field(default_factory=list)
     final_url: str = ""
 
@@ -39,8 +39,12 @@ class OctopusAgent:
 
     def run(self, task: str, max_steps: Optional[int] = None) -> AgentRun:
         """🚀 Выполнить задачу (синхронно, для тестов/CLI)."""
+        if not task or not task.strip():
+            raise ValueError("Задача агента не может быть пустой")
         run = AgentRun(task=task, status="running")
-        limit = max_steps or self.config.max_steps
+        limit = max_steps if max_steps is not None else self.config.max_steps
+        if limit < 1:
+            raise ValueError("max_steps должен быть >= 1")
         history: List[str] = []
         try:
             self.controller.start()
@@ -52,13 +56,13 @@ class OctopusAgent:
                                f"({decision.reason})")
                 self._execute(decision.action, decision.target, decision.text)
                 history.append(f"{decision.action} {decision.target}")
+                run.steps = step + 1
                 if decision.action == "done":
                     run.status = "done"
                     break
-                run.steps = step + 1
             else:
-                run.status = "done"
-                run.log.append(f"Достигнут лимит шагов ({limit})")
+                run.status = "limit"
+                run.log.append(f"Достигнут лимит шагов ({limit}) без подтверждения done")
             run.final_url = self.controller.url()
         except Exception as exc:  # noqa: BLE001
             run.status = "error"
