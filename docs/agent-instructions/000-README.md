@@ -13,6 +13,8 @@
 | [`002-REPOSITORY.md`](002-REPOSITORY.md) | 🗂️ Правила git, структура, секреты |
 | [`003-GITHUB-CHATGPT.md`](003-GITHUB-CHATGPT.md) | 🤖 ChatGPT + GitHub-плагин: поток правок |
 | [`004-DEPLOY.md`](004-DEPLOY.md) | 🚀 Установка на сервер и авто-деплой |
+| [`005-MULTIAGENT-PARALLEL-SKILLS.md`](005-MULTIAGENT-PARALLEL-SKILLS.md) | 🌐 Параллельная многоагентность, статус шага, skills-first, deep research |
+| [`STATUS.md`](STATUS.md) | 📊 Текущий статус работы (обновляется каждым агентом) |
 | [`TEMPLATE.md`](TEMPLATE.md) | 📋 Эталон ответа агента |
 
 ---

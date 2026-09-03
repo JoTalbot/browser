@@ -83,5 +83,18 @@
 - [Правила работы с репозиторием](docs/agent-instructions/002-REPOSITORY.md)
 - [ChatGPT + GitHub интеграция](docs/agent-instructions/003-GITHUB-CHATGPT.md)
 - [Установка и деплой на сервер](docs/agent-instructions/004-DEPLOY.md)
+- [Многоагентность, статус шага, skills-first](docs/agent-instructions/005-MULTIAGENT-PARALLEL-SKILLS.md)
+- [Текущий статус работы](docs/agent-instructions/STATUS.md)
 - [Шаблон ответа агента](docs/agent-instructions/TEMPLATE.md)
 - [Архитектура проекта](docs/ARCHITECTURE.md)
+
+---
+
+## 8. 🌐 Параллельная многоагентная работа (кратко)
+
+- 🤖 Над проектом могут одновременно работать разные ИИ-агенты с разных машин —
+  см. [`005-MULTIAGENT-PARALLEL-SKILLS.md`](docs/agent-instructions/005-MULTIAGENT-PARALLEL-SKILLS.md).
+- 📊 Перед шагом и после — обновлять [`STATUS.md`](docs/agent-instructions/STATUS.md).
+- 🛠️ Использовать skills-first: искать/переиспользовать/создавать skill в `skills/`.
+- 🔎 Перед каждым шагом — искать готовые решения в интернете и репозиториях
+  (deep research), а не изобретать заново.
