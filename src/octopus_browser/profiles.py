@@ -36,8 +36,20 @@ class ProfileManager:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    @staticmethod
+    def validate_name(name: str) -> str:
+        """Проверить имя профиля до любой работы с файловой системой."""
+        if not isinstance(name, str) or not _NAME_RE.fullmatch(name):
+            raise ValueError("Имя профиля: только A-Z, 0-9, '_', '-' (до 64 символов)")
+        return name
+
     def _meta_path(self, name: str) -> Path:
+        name = self.validate_name(name)
         return self.config.profiles_dir / name / "profile.json"
+
+    def _profile_dir(self, name: str) -> Path:
+        name = self.validate_name(name)
+        return self.config.profiles_dir / name
 
     def list(self) -> List[dict]:
         """📋 Список всех профилей."""
@@ -52,9 +64,8 @@ class ProfileManager:
     def create(self, name: str | None = None) -> dict:
         """➕ Создать профиль с уникальным именем."""
         name = name or f"profile-{uuid.uuid4().hex[:8]}"
-        if not _NAME_RE.match(name):
-            raise ValueError("Имя профиля: только A-Z, 0-9, '_', '-' (до 64 символов)")
-        profile_dir = self.config.profiles_dir / name
+        self.validate_name(name)
+        profile_dir = self._profile_dir(name)
         if profile_dir.exists():
             raise FileExistsError(f"Профиль '{name}' уже существует")
         profile_dir.mkdir(parents=True)
@@ -64,7 +75,8 @@ class ProfileManager:
 
     def get(self, name: str) -> Path:
         """🗂️ Каталог профиля (создаёт при отсутствии)."""
-        profile_dir = self.config.profiles_dir / name
+        name = self.validate_name(name)
+        profile_dir = self._profile_dir(name)
         profile_dir.mkdir(parents=True, exist_ok=True)
         meta_path = self._meta_path(name)
         if not meta_path.exists():
@@ -73,7 +85,8 @@ class ProfileManager:
 
     def delete(self, name: str) -> bool:
         """🗑️ Удалить профиль."""
-        profile_dir = self.config.profiles_dir / name
+        name = self.validate_name(name)
+        profile_dir = self._profile_dir(name)
         if not profile_dir.exists():
             return False
         shutil.rmtree(profile_dir)
