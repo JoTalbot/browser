@@ -1,5 +1,4 @@
 """🧪 Smoke- и unit-тесты Octopus Browser без реального Playwright."""
-
 from __future__ import annotations
 
 import importlib
@@ -10,6 +9,8 @@ from fastapi.testclient import TestClient
 from octopus_browser.agent import OctopusAgent
 from octopus_browser.config import AppConfig
 from octopus_browser.profiles import ProfileManager
+from octopus_browser.sessions import SessionManager
+from octopus_browser.security import validate_external_url
 from octopus_browser.vision import VisionDecision
 
 
@@ -17,6 +18,8 @@ def test_config_defaults(tmp_path) -> None:
     cfg = AppConfig()
     cfg.data_dir = tmp_path
     assert cfg.app_port > 0
+    assert cfg.max_concurrency >= 1
+    assert cfg.navigation_timeout_ms >= 1
     cfg.ensure_dirs()
     assert cfg.profiles_dir.exists()
 
@@ -40,13 +43,65 @@ def test_profile_name_rejects_path_traversal() -> None:
         ProfileManager.validate_name("a/b")
 
 
-def test_api_validates_navigation_url() -> None:
-    from octopus_browser.api import app
+def test_session_id_rejects_path_traversal(tmp_path) -> None:
+    cfg = AppConfig()
+    cfg.data_dir = tmp_path
+    mgr = SessionManager(cfg)
+    with pytest.raises(ValueError):
+        mgr.load("../escape")
+    with pytest.raises(ValueError):
+        mgr.load("a/b")
 
+
+def test_session_roundtrip(tmp_path) -> None:
+    cfg = AppConfig()
+    cfg.data_dir = tmp_path
+    mgr = SessionManager(cfg)
+    sid = mgr.save({"cookies": [{"name": "x"}]}, "main", "test")
+    assert mgr.load(sid) == {"cookies": [{"name": "x"}]}
+    exported = mgr.export(sid)
+    imported = mgr.import_session(exported, "secondary")
+    assert imported == sid
+    assert mgr.load(imported) == {"cookies": [{"name": "x"}]}
+
+
+def test_api_authentication() -> None:
+    from octopus_browser.api import app, config
+
+    config.api_key = "test-key"
     client = TestClient(app)
-    assert client.post("/navigate", json={"url": "file:///etc/passwd"}).status_code == 422
-    assert client.post("/navigate", json={"url": "not-a-url"}).status_code == 422
-    assert client.post("/navigate", json={"url": "https://example.com", "profile": "../x"}).status_code == 422
+    assert client.get("/octopus/info").status_code == 401
+    assert client.get("/octopus/info", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/octopus/info", headers={"X-API-Key": "test-key"}).status_code == 200
+
+
+def test_api_validates_navigation_url() -> None:
+    from octopus_browser.api import app, config
+
+    config.api_key = "test-key"
+    client = TestClient(app)
+    headers = {"X-API-Key": "test-key"}
+    assert client.post("/navigate", json={"url": "file:///etc/passwd"}, headers=headers).status_code == 422
+    assert client.post("/navigate", json={"url": "not-a-url"}, headers=headers).status_code == 422
+    assert (
+        client.post(
+            "/navigate",
+            json={"url": "https://example.com", "profile": "../x"},
+            headers=headers,
+        ).status_code
+        == 422
+    )
+
+
+def test_external_url_rejects_non_global_address(monkeypatch) -> None:
+    import socket
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    with pytest.raises(ValueError, match="частные/локальные"):
+        validate_external_url("http://example.test")
 
 
 def test_agent_rejects_empty_task() -> None:
@@ -76,7 +131,12 @@ def test_agent_reports_step_limit() -> None:
 
 
 def test_modules_import() -> None:
-    for mod in ("octopus_browser.core.launcher", "octopus_browser.sessions",
-                "octopus_browser.cookies", "octopus_browser.network",
-                "octopus_browser.vision", "octopus_browser.agent"):
+    for mod in (
+        "octopus_browser.core.launcher",
+        "octopus_browser.sessions",
+        "octopus_browser.cookies",
+        "octopus_browser.network",
+        "octopus_browser.vision",
+        "octopus_browser.agent",
+    ):
         importlib.import_module(mod)

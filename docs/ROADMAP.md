@@ -17,27 +17,31 @@
 
 ## Phase 1 — P0 Security
 
-- [ ] API key/OIDC authentication.
-- [ ] Endpoint-level authorization.
+- [x] API key authentication.
+- [ ] OIDC authentication.
+- [x] Endpoint-level protection for sensitive API routes.
 - [ ] Secrets/session encryption at rest.
-- [ ] SSRF protection and explicit egress policy.
-- [ ] DNS rebinding protection.
-- [ ] Per-profile filesystem sandbox.
-- [ ] Request size/rate/concurrency limits.
+- [x] SSRF syntax + DNS address preflight.
+- [ ] DNS rebinding protection at network/browser layer.
+- [x] Profile/session filesystem path sandboxing.
+- [x] Browser concurrency limit.
+- [ ] Request size/rate limiting.
 - [ ] Audit log without leaking cookies/tokens.
 
 **Exit:** no unauthenticated sensitive operation; security regression suite green.
 
 ## Phase 2 — Browser Runtime
 
+- [x] Configurable Playwright action/navigation timeout.
 - [ ] Robust browser lifecycle manager.
 - [ ] Context/page/tab registry.
-- [ ] Navigation timeout and cancellation.
+- [ ] Navigation cancellation/deadlines.
 - [ ] Download/upload policy.
 - [ ] Popup/dialog/permission handling.
 - [ ] Network interception and allow/deny rules.
 - [ ] Proxy profiles and health-aware rotation.
 - [ ] Browser crash recovery.
+- [ ] Per-profile process locking.
 
 **Exit:** 24h soak test without leaked processes or profiles.
 
@@ -46,6 +50,7 @@
 - [ ] Typed action schema.
 - [ ] Explicit state machine: observe → plan → validate → act → verify.
 - [ ] Action preconditions/postconditions.
+- [x] Bounded step budget with explicit `limit` state.
 - [ ] Retry policy with bounded budgets.
 - [ ] Cancellation/deadlines.
 - [ ] Goal completion verification.
@@ -66,8 +71,6 @@
 - [ ] Prompt/version registry.
 - [ ] Cost and latency budgets.
 
-**Exit:** reliable task completion benchmark across representative sites.
-
 ## Phase 5 — Data Plane
 
 - [ ] Session import/export schema versioning.
@@ -76,8 +79,6 @@
 - [ ] Profile lifecycle policies.
 - [ ] Backup/restore.
 - [ ] Data retention and secure deletion.
-
-**Exit:** documented recovery and secret-handling guarantees.
 
 ## Phase 6 — Octopus / AIOS Integration
 
@@ -89,8 +90,6 @@
 - [ ] Multi-agent concurrency coordination.
 - [ ] Backpressure and queueing.
 
-**Exit:** AIOS can submit, monitor, cancel and recover browser jobs through the public contract.
-
 ## Phase 7 — Observability & Operations
 
 - [ ] Structured JSON logs.
@@ -98,23 +97,20 @@
 - [ ] Browser/agent/provider dashboards.
 - [ ] Error taxonomy.
 - [ ] Alert thresholds.
-- [ ] Health/readiness/liveness endpoints.
+- [x] Health endpoint.
+- [ ] Readiness endpoint.
 - [ ] Run/event persistence.
-
-**Exit:** every production run is diagnosable without reproducing it manually.
 
 ## Phase 8 — QA / Security / Performance
 
-- [ ] Unit suite.
+- [x] Unit/smoke suite.
 - [ ] API integration suite.
 - [ ] Real Playwright E2E suite.
-- [ ] Security regression suite.
+- [x] Security regression coverage for auth/path/SSRF baseline.
 - [ ] Dependency/SBOM scanning.
 - [ ] Load and soak tests.
 - [ ] Failure-injection tests.
 - [ ] Compatibility matrix for Python/Playwright/browser versions.
-
-**Exit:** release gates green and performance budgets documented.
 
 ## Phase 9 — Release Engineering
 
@@ -127,8 +123,6 @@
 - [ ] Migration/version compatibility checks.
 - [ ] Production runbook.
 
-**Exit:** release can be deployed and rolled back predictably.
-
 ## Phase 10 — Advanced Platform
 
 - [ ] Multi-browser support where justified.
@@ -140,11 +134,9 @@
 - [ ] Benchmark-driven model routing.
 - [ ] Plugin/skill system.
 
-**Final target:** secure, observable, recoverable autonomous browser runtime integrated into Octopus/AIOS.
-
 ## Правило разработки
 
-- Любое новое улучшение, обнаруженное во время реализации, сначала классифицируется как security/product/quality/performance.
-- Если улучшение снижает риск или закрывает production blocker, оно добавляется в текущую фазу, а не откладывается ради формального следования старому плану.
-- Если изменение меняет продуктовый контракт, оно фиксируется отдельным roadmap item до реализации.
-- После каждой фазы выполняются: тесты → security review → integration check → обновление статуса → следующий этап.
+- Любое новое улучшение классифицируется как security/product/quality/performance.
+- Production blockers закрываются в текущей фазе, даже если старый план этого не содержал.
+- Изменения публичного контракта фиксируются отдельным roadmap item.
+- После каждой фазы: тесты → security review → integration check → статус → следующий этап.

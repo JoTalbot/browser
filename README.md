@@ -1,18 +1,18 @@
 # 🐙 Octopus Browser
 
-> 🤖 Супербезопасный браузер с ИИ-управлением — адаптер экосистемы
-> **Октопус** (`JoTalbot/AIOS`, `JoTalbot/octopus`).
+> 🤖 Безопасный браузер с ИИ-управлением и адаптер экосистемы Octopus/AIOS.
 
 ---
 
-## 🎯 О проекте
+## 🎯 Возможности
 
-- 🛡️ **Безопасность** — изоляция, sandbox, policy-контроль и безопасное выполнение.
-- 🌐 **Прокси и VPN** — каналы, ротация и гео-профили.
-- 👥 **Мульти-профили** — независимые профили, сессии и cookies.
-- 🍪 **Менеджеры сессий и кук** — импорт/экспорт и lifecycle management.
-- 👁️ **ИИ-управление** — vision + агентский action loop.
-- 🤖 **Агентский контур** — GitHub → CI → сервер.
+- 🛡️ API-key authentication и консервативная SSRF/egress policy.
+- 🌐 Playwright runtime с configurable timeouts.
+- 👥 Изолированные профили и безопасные session paths.
+- 🍪 Session/cookie foundation.
+- 👁️ Vision + агентский action loop.
+- 🚦 Ограничение одновременных browser jobs.
+- 🧪 Ruff + Pytest quality gate.
 
 ---
 
@@ -21,33 +21,44 @@
 | Путь | Описание |
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | 🤖 Автоинструкции для агентов |
-| [`docs/agent-instructions/`](docs/agent-instructions/000-README.md) | 📚 Полный набор инструкций |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 🏗️ Архитектура проекта |
-| [`docs/AUDIT-2026-09-03.md`](docs/AUDIT-2026-09-03.md) | 🔎 Полный production-аудит |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | 🗺️ План развития до production platform |
-| [`deploy/`](deploy/) | 🚀 Скрипты установки/обновления сервера |
+| [`docs/agent-instructions/`](docs/agent-instructions/000-README.md) | 📚 Инструкции |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 🏗️ Архитектура |
+| [`docs/AUDIT_2026-09-03.md`](docs/AUDIT_2026-09-03.md) | 🔎 Production/security audit |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | 🗺️ План развития |
+| [`deploy/`](deploy/) | 🚀 Deployment scripts |
 | [`src/octopus_browser/`](src/octopus_browser/) | 🧩 Python + Playwright + FastAPI |
 
 ---
 
-## 🚀 Workflow правок
-
-1. ✍️ Агент правит код/документацию.
-2. 📦 Изменения проходят PR/merge в `main`.
-3. 🧪 CI выполняет Ruff + Pytest.
-4. ⚙️ Production deploy запускается только после quality gate.
-5. 🔄 Сервер применяет `deploy/server-update.sh`.
-6. 📊 Статус доступен в GitHub Actions.
-
----
-
-## 🧪 Быстрый старт
+## 🚀 Быстрый старт
 
 ```bash
 make install   # зависимости + браузер
 make test      # smoke/unit-тесты
 make run       # API на :8090
 ```
+
+### 🔐 Production environment
+
+```bash
+export OCTOPUS_API_KEY='change-me'
+export APP_HOST='127.0.0.1'
+export APP_PORT='8090'
+export NAVIGATION_TIMEOUT_MS='30000'
+export MAX_BROWSER_CONCURRENCY='4'
+export ALLOWED_HOSTS='example.com,example.org'
+```
+
+`OCTOPUS_API_KEY` обязателен для чувствительных API endpoints. Не храните ключ в репозитории.
+
+---
+
+## 🧪 Quality gate
+
+1. `ruff check .`
+2. `pytest -q`
+3. Security regression tests
+4. Только после зелёного CI допускается merge/deploy.
 
 ---
 
@@ -59,16 +70,18 @@ make run       # API на :8090
 - 🟢 Profiles / sessions / cookies foundation
 - 🟢 Initial agent + vision loop
 - 🟢 CI quality gate
-- 🟢 Deploy quality gate + server update path
-- 🟢 Initial security hardening
-- 🟡 Production security: AuthN/AuthZ, SSRF/egress policy, encryption-at-rest
-- 🟡 Agent runtime: state machine, cancellation, retries, typed actions
-- 🟡 Observability: metrics, traces, persistent runs
+- 🟢 Initial authentication + SSRF baseline
+- 🟢 Filesystem/session path hardening
+- 🟢 Runtime timeout + concurrency controls
+- 🟡 DNS-rebinding network enforcement
+- 🟡 Encryption-at-rest / secret management
+- 🟡 Agent state machine / cancellation / retries
+- 🟡 Observability / metrics / traces
 - 🔴 Production release: not ready yet
 
 ---
 
-## 📚 Development plan
+## 📚 План развития
 
 - **Phase 1:** P0 Security
 - **Phase 2:** Browser Runtime
@@ -85,5 +98,4 @@ make run       # API на :8090
 
 ---
 
-> ⚠️ **Безопасность:** никогда не вставляйте токены, ключи, пароли
-> в чат, коммиты или инструкции. Секреты — только в GitHub Secrets.
+> ⚠️ **Безопасность:** токены, ключи, cookies и storage state не должны попадать в чат, коммиты или логи. Используйте secrets manager/GitHub Secrets.

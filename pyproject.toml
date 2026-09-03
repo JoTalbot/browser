@@ -25,5 +25,9 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = ["data"]
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = ["I001"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -10,6 +10,7 @@ from octopus_browser.vision import VisionEngine
 
 log = logging.getLogger("octopus.agent")
 
+
 @dataclass
 class AgentRun:
     task: str
@@ -17,6 +18,7 @@ class AgentRun:
     status: str = "idle"
     log: list[str] = field(default_factory=list)
     final_url: str = ""
+
 
 class OctopusAgent:
     def __init__(self, config: AppConfig, controller: BrowserController, vision: VisionEngine | None = None) -> None:
