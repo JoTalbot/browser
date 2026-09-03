@@ -1,1 +1,69 @@
-# browser
+# 🐙 Octopus Browser
+
+> 🤖 Супербезопасный браузер с ИИ-управлением — адаптер экосистемы
+> **Октопус** (`JoTalbot/AIOS`, `JoTalbot/octopus`).
+
+---
+
+## 🎯 О проекте
+
+- 🛡️ **Безопасность** — максимальная изоляция, sandbox, контроль тредов.
+- 🌐 **Прокси и VPN** — встроенные каналы, ротация, гео-профили.
+- 👥 **Мульти-профили** — независимые профили, сессии, изоляция cookies.
+- 🍪 **Менеджеры сессий и кук** — экспорт/импорт, авто-подстановка.
+- 👁️ **ИИ-управление** — vision + скорость реакции как у человека.
+- 🤖 **Агентский контур** — правки через GitHub, автоматический деплой на сервер.
+
+---
+
+## 📂 Структура
+
+| Путь | Описание |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | 🤖 Автоинструкции для агентов |
+| [`docs/agent-instructions/`](docs/agent-instructions/000-README.md) | 📚 Полный набор инструкций |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 🏗️ Архитектура проекта |
+| [`deploy/`](deploy/) | 🚀 Скрипты установки/обновления сервера |
+| [`deploy/github-actions/deploy.yml.example`](deploy/github-actions/deploy.yml.example) | ⚙️ Шаблон авто-деплоя GitHub → сервер |
+| [`src/octopus_browser/`](src/octopus_browser/) | 🧩 Код браузера (Python + Playwright + FastAPI) |
+
+---
+
+## 🚀 Workflow правок
+
+1. ✍️ Агент (ChatGPT с GitHub-плагином / Arena и др.) правит код и инструкции.
+2. 📦 Правки попадают в `main` через PR или прямой push.
+3. ⚙️ GitHub Actions подключается к серверу по SSH.
+4. 🔄 Сервер делает `git pull` и применяет обновление (`deploy/server-update.sh`).
+5. 📊 Статус виден в Actions; инструкции зеркалируются в `/root/agents/`.
+
+---
+
+## 🔐 Установка на сервер
+
+- 📖 Подробно: [`docs/agent-instructions/004-DEPLOY.md`](docs/agent-instructions/004-DEPLOY.md).
+- 🔑 Требуемые Secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`.
+- 🧲 Fallback: на сервере — watchdog (cron), который сам подтягивает изменения.
+
+## 🧪 Быстрый старт
+
+```bash
+make install   # зависимости + браузер
+make test      # smoke-тесты
+make run       # API на :8090 -> http://localhost:8090/docs
+```
+
+---
+
+## 🛠️ Статус
+
+- ✅ Инструкции агентов: готово
+- ✅ Каркас проекта: конфиг, профили, сессии, cookies, прокси/VPN, vision, агент, API
+- ⬜ Реальные прокси/VPN-провайдеры
+- ⬜ Интеграция с Октопусом/AIOS: планируется
+- ⬜ Авто-деплой: шаблон готов (нужны Secrets + активация workflow)
+
+---
+
+> ⚠️ **Безопасность:** никогда не вставляйте токены, ключи, пароли
+> в чат, коммиты или инструкции. Секреты — только в GitHub Secrets.
