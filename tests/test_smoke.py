@@ -8,9 +8,10 @@ from fastapi.testclient import TestClient
 
 from octopus_browser.agent import OctopusAgent
 from octopus_browser.config import AppConfig
+from octopus_browser.network import ProxyManager
 from octopus_browser.profiles import ProfileManager
-from octopus_browser.sessions import SessionManager
 from octopus_browser.security import validate_external_url
+from octopus_browser.sessions import SessionManager
 from octopus_browser.vision import VisionDecision
 
 
@@ -102,6 +103,11 @@ def test_external_url_rejects_non_global_address(monkeypatch) -> None:
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     with pytest.raises(ValueError, match="частные/локальные"):
         validate_external_url("http://example.test")
+
+
+def test_proxy_validation_rejects_embedded_credentials() -> None:
+    with pytest.raises(ValueError, match="credentials|Учётные"):
+        ProxyManager.validate_server("http://user:pass@example.com:8080")
 
 
 def test_agent_rejects_empty_task() -> None:
