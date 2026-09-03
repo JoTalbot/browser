@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any, List, Optional
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from octopus_browser.config import AppConfig
@@ -18,6 +19,7 @@ config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
 sessions = SessionManager(config)
+_browser_slots = threading.BoundedSemaphore(max(1, config.max_concurrency))
 
 
 class ProfileIn(BaseModel):
@@ -68,8 +70,8 @@ class AgentTaskIn(BaseModel):
         return ProfileManager.validate_name(value)
 
 
-def protected() -> None:
-    require_api_key()
+def protected(x_api_key: str | None = Header(default=None)) -> None:
+    require_api_key(x_api_key=x_api_key, expected_key=config.api_key)
 
 
 def _url(value: str) -> str:
@@ -79,12 +81,18 @@ def _url(value: str) -> str:
         raise HTTPException(422, str(exc)) from exc
 
 
+def _acquire_browser_slot() -> None:
+    if not _browser_slots.acquire(blocking=False):
+        raise HTTPException(429, "Достигнут лимит одновременно работающих браузеров")
+
+
 @app.get("/health")
 def health() -> dict:
     return {
         "status": "ok",
         "service": "octopus-browser",
         "version": app.version,
+        "browser_concurrency": config.max_concurrency,
     }
 
 
@@ -152,30 +160,48 @@ def import_cookies(payload: dict[str, Any], _: None = Depends(protected)) -> dic
     return {"ok": True, "note": "Импорт применяется при старте профиля"}
 
 
+def _with_browser_slot(callback):
+    _acquire_browser_slot()
+    try:
+        return callback()
+    finally:
+        _browser_slots.release()
+
+
 @app.post("/navigate")
 def navigate(data: NavigateIn, _: None = Depends(protected)) -> dict:
     from octopus_browser.core.launcher import BrowserController
 
-    controller = BrowserController(config, profile_dir=profiles.get(data.profile))
-    try:
-        controller.start()
-        controller.goto(_url(data.url))
-        return {"url": controller.url(), "title": controller.title()}
-    finally:
-        controller.stop()
+    url = _url(data.url)
+
+    def run() -> dict:
+        controller = BrowserController(config, profile_dir=profiles.get(data.profile))
+        try:
+            controller.start()
+            controller.goto(url)
+            return {"url": controller.url(), "title": controller.title()}
+        finally:
+            controller.stop()
+
+    return _with_browser_slot(run)
 
 
 @app.post("/screenshot")
 def screenshot(data: NavigateIn, _: None = Depends(protected)) -> dict:
     from octopus_browser.core.launcher import BrowserController
 
-    controller = BrowserController(config, profile_dir=profiles.get(data.profile))
-    try:
-        controller.start()
-        controller.goto(_url(data.url))
-        return {"image_base64": controller.screenshot()}
-    finally:
-        controller.stop()
+    url = _url(data.url)
+
+    def run() -> dict:
+        controller = BrowserController(config, profile_dir=profiles.get(data.profile))
+        try:
+            controller.start()
+            controller.goto(url)
+            return {"image_base64": controller.screenshot()}
+        finally:
+            controller.stop()
+
+    return _with_browser_slot(run)
 
 
 @app.post("/agent/run")
@@ -183,15 +209,18 @@ def agent_run(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
     from octopus_browser.agent import OctopusAgent
     from octopus_browser.core.launcher import BrowserController
 
-    controller = BrowserController(config, profile_dir=profiles.get(data.profile))
-    agent = OctopusAgent(config, controller)
-    run = agent.run(data.task, max_steps=data.max_steps)
-    return {
-        "status": run.status,
-        "steps": run.steps,
-        "final_url": run.final_url,
-        "log": run.log,
-    }
+    def run() -> dict:
+        controller = BrowserController(config, profile_dir=profiles.get(data.profile))
+        agent = OctopusAgent(config, controller)
+        result = agent.run(data.task, max_steps=data.max_steps)
+        return {
+            "status": result.status,
+            "steps": result.steps,
+            "final_url": result.final_url,
+            "log": result.log,
+        }
+
+    return _with_browser_slot(run)
 
 
 @app.get("/")
