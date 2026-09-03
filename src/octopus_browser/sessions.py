@@ -1,5 +1,4 @@
 """🔑 Менеджер сессий: сохранение, загрузка, экспорт/импорт состояния браузера."""
-
 from __future__ import annotations
 
 import base64
@@ -13,18 +12,25 @@ from octopus_browser.config import AppConfig
 
 
 class SessionManager:
-    """Сохранение storage_state (cookies + localStorage + сессии) по профилям."""
+    """Сохранение storage_state по профилям с безопасными именами файлов."""
 
     def __init__(self, config: AppConfig) -> None:
         self.config = config
         self.config.ensure_dirs()
+        self._root = self.config.sessions_dir.resolve()
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _path(self, name: str) -> Path:
-        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
-        return self.config.sessions_dir / f"{safe}.json"
+    def _path(self, session_id: str) -> Path:
+        if not isinstance(session_id, str) or not session_id or len(session_id) > 128:
+            raise ValueError("Некорректный session_id")
+        path = (self._root / f"{session_id}.json").resolve()
+        try:
+            path.relative_to(self._root)
+        except ValueError as exc:
+            raise ValueError("Путь сессии выходит за пределы каталога сессий") from exc
+        return path
 
     def save(self, storage_state: dict[str, Any], profile: str, label: str = "") -> str:
         """💾 Сохранить состояние сессии профиля. Возвращает session_id."""
@@ -40,16 +46,14 @@ class SessionManager:
         return session_id
 
     def load(self, session_id: str) -> dict[str, Any]:
-        """📂 Загрузить storage_state по session_id."""
         path = self._path(session_id)
         if not path.exists():
             raise FileNotFoundError(f"Сессия '{session_id}' не найдена")
         return json.loads(path.read_text())["storage_state"]
 
     def list(self) -> List[dict]:
-        """📋 Список сессий."""
         out: List[dict] = []
-        for path in self.config.sessions_dir.glob("*.json"):
+        for path in self._root.glob("*.json"):
             try:
                 data = json.loads(path.read_text())
                 out.append({k: data[k] for k in ("id", "profile", "label", "created") if k in data})
@@ -58,16 +62,20 @@ class SessionManager:
         return sorted(out, key=lambda s: s.get("created", ""), reverse=True)
 
     def export(self, session_id: str) -> str:
-        """📤 Экспорт сессии в base64 (для передачи между серверами)."""
         return base64.b64encode(self._path(session_id).read_bytes()).decode()
 
     def import_session(self, b64: str, profile: str) -> str:
-        """📥 Импорт сессии из base64."""
         try:
-            raw = base64.b64decode(b64)
+            raw = base64.b64decode(b64, validate=True)
             payload = json.loads(raw)
-        except Exception as exc:  # noqa: BLE001
+        except (ValueError, json.JSONDecodeError, TypeError) as exc:
             raise ValueError("Некорректный формат импорта сессии") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("Импорт сессии должен содержать JSON-объект")
         session_id = payload.get("id") or str(uuid.uuid4())
+        if not isinstance(session_id, str):
+            raise ValueError("Некорректный id сессии")
+        payload["id"] = session_id
+        payload["profile"] = profile
         self._path(session_id).write_text(json.dumps(payload, ensure_ascii=False))
         return session_id
