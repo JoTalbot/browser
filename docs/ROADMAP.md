@@ -5,138 +5,104 @@
 Построить production-grade browser runtime для экосистемы Octopus/AIOS: изолированные профили, безопасный web execution, vision/LLM agent, управляемые sessions, observability и надёжный deployment.
 
 ## Phase 0 — Foundation / Audit
-
-- [x] Репозиторий и package layout.
-- [x] FastAPI control plane.
-- [x] Playwright launcher.
-- [x] Profiles/sessions/cookies foundation.
+- [x] Repository/package layout, FastAPI control plane, Playwright launcher.
+- [x] Profiles/sessions/cookies foundation and initial security hardening.
 - [x] CI/CD deploy foundation.
-- [x] Initial security hardening.
 - [ ] Lock dependencies + reproducible build.
-- [ ] Remove all tracked runtime artifacts.
+- [ ] Remove tracked runtime artifacts and add repository hygiene gate.
 
 ## Phase 1 — P0 Security
-
-- [x] API key authentication.
+- [x] API key authentication and endpoint protection.
 - [ ] OIDC authentication.
-- [x] Endpoint-level protection for sensitive API routes.
-- [ ] Secrets/session encryption at rest.
 - [x] SSRF syntax + DNS address preflight.
-- [ ] DNS rebinding protection at network/browser layer.
-- [x] Profile/session filesystem path sandboxing.
+- [ ] DNS-rebinding enforcement at network/browser layer.
+- [x] Profile/session filesystem sandboxing.
 - [x] Browser concurrency limit.
 - [ ] Request size/rate limiting.
-- [ ] Audit log without leaking cookies/tokens.
-
-**Exit:** no unauthenticated sensitive operation; security regression suite green.
+- [ ] Secret-safe audit logging.
+- [ ] Encrypted session/cookie storage.
 
 ## Phase 2 — Browser Runtime
-
 - [x] Configurable Playwright action/navigation timeout.
-- [ ] Robust browser lifecycle manager.
+- [ ] Lifecycle manager with deterministic startup/shutdown.
 - [ ] Context/page/tab registry.
 - [ ] Navigation cancellation/deadlines.
 - [ ] Download/upload policy.
-- [ ] Popup/dialog/permission handling.
+- [ ] Popup/dialog/permission policy.
 - [ ] Network interception and allow/deny rules.
-- [ ] Proxy profiles and health-aware rotation.
-- [ ] Browser crash recovery.
-- [ ] Per-profile process locking.
-
-**Exit:** 24h soak test without leaked processes or profiles.
+- [x] Proxy validation and health checks.
+- [ ] Health-aware proxy rotation.
+- [ ] Crash recovery and per-profile locking.
 
 ## Phase 3 — Agent Runtime
-
-- [ ] Typed action schema.
-- [ ] Explicit state machine: observe → plan → validate → act → verify.
-- [ ] Action preconditions/postconditions.
+- [ ] Typed action schema and validation.
+- [ ] Explicit observe → plan → validate → act → verify state machine.
+- [ ] Preconditions/postconditions.
 - [x] Bounded step budget with explicit `limit` state.
-- [ ] Retry policy with bounded budgets.
-- [ ] Cancellation/deadlines.
+- [ ] Bounded retries, cancellation and deadlines.
 - [ ] Goal completion verification.
-- [ ] Recovery from stale selectors/pages.
-- [ ] Provider abstraction for vision/LLM.
-- [ ] Structured model outputs.
-
-**Exit:** benchmark suite with deterministic pass/fail criteria.
+- [ ] Stale page/selector recovery.
+- [ ] Provider abstraction and structured model outputs.
 
 ## Phase 4 — Vision & Web Intelligence
-
 - [ ] DOM + accessibility tree + screenshot fusion.
-- [ ] Element grounding and stable selectors.
+- [ ] Stable element grounding/selectors.
 - [ ] OCR fallback.
 - [ ] Page understanding cache.
-- [ ] Vision confidence scoring.
-- [ ] Model/provider failover.
+- [ ] Confidence scoring and model/provider failover.
 - [ ] Prompt/version registry.
-- [ ] Cost and latency budgets.
+- [ ] Cost/latency budgets.
 
 ## Phase 5 — Data Plane
-
-- [ ] Session import/export schema versioning.
-- [ ] Encrypted cookie/storage-state vault.
-- [ ] Session TTL and revocation.
-- [ ] Profile lifecycle policies.
+- [ ] Versioned session import/export schema.
+- [ ] Authenticated encryption for cookie/storage-state vault.
+- [ ] Session TTL, revocation and profile lifecycle policies.
 - [ ] Backup/restore.
-- [ ] Data retention and secure deletion.
+- [ ] Retention and secure deletion.
 
 ## Phase 6 — Octopus / AIOS Integration
-
-- [ ] Stable adapter contract.
-- [ ] Capability discovery.
-- [ ] Job submission/status API.
+- [ ] Stable adapter contract and capability discovery.
+- [ ] Job submission/status/cancellation API.
 - [ ] Webhook/event integration.
-- [ ] Shared run IDs/correlation IDs.
-- [ ] Multi-agent concurrency coordination.
-- [ ] Backpressure and queueing.
+- [ ] Shared run/correlation IDs.
+- [ ] Multi-agent coordination, backpressure and queueing.
 
 ## Phase 7 — Observability & Operations
-
-- [ ] Structured JSON logs.
-- [ ] Metrics and traces.
+- [ ] Structured JSON logs with secret redaction.
+- [ ] Metrics/traces and error taxonomy.
 - [ ] Browser/agent/provider dashboards.
-- [ ] Error taxonomy.
 - [ ] Alert thresholds.
 - [x] Health endpoint.
 - [ ] Readiness endpoint.
-- [ ] Run/event persistence.
+- [ ] Persistent run/event store.
 
 ## Phase 8 — QA / Security / Performance
-
-- [x] Unit/smoke suite.
-- [ ] API integration suite.
-- [ ] Real Playwright E2E suite.
-- [x] Security regression coverage for auth/path/SSRF baseline.
-- [ ] Dependency/SBOM scanning.
-- [ ] Load and soak tests.
-- [ ] Failure-injection tests.
-- [ ] Compatibility matrix for Python/Playwright/browser versions.
+- [x] Unit/smoke suite and baseline security regression tests.
+- [ ] API integration suite and real Playwright E2E.
+- [ ] Dependency/SBOM/security scanning.
+- [ ] Load, soak and failure-injection tests.
+- [ ] Python/Playwright/browser compatibility matrix.
+- [ ] Performance budgets enforced in CI.
 
 ## Phase 9 — Release Engineering
-
-- [ ] Semantic versioning.
-- [ ] Changelog/release notes.
-- [ ] Reproducible artifact build.
-- [ ] Deployment preflight.
-- [ ] Health-gated rollout.
+- [ ] Semantic versioning and changelog.
+- [ ] Reproducible release artifacts.
+- [ ] Deployment preflight and health-gated rollout.
 - [ ] Automatic rollback.
 - [ ] Migration/version compatibility checks.
-- [ ] Production runbook.
+- [ ] Production runbook and release checklist.
 
 ## Phase 10 — Advanced Platform
-
 - [ ] Multi-browser support where justified.
-- [ ] Distributed browser workers.
-- [ ] Queue scheduler.
-- [ ] Policy engine.
+- [ ] Distributed browser workers and queue scheduler.
+- [ ] Policy engine and risk classification.
 - [ ] Human approval checkpoints for risky actions.
 - [ ] Long-running workflows.
 - [ ] Benchmark-driven model routing.
-- [ ] Plugin/skill system.
+- [ ] Plugin/skill system with capability isolation.
 
-## Правило разработки
+## 🧭 All-phase execution rule
 
-- Любое новое улучшение классифицируется как security/product/quality/performance.
-- Production blockers закрываются в текущей фазе, даже если старый план этого не содержал.
-- Изменения публичного контракта фиксируются отдельным roadmap item.
-- После каждой фазы: тесты → security review → integration check → статус → следующий этап.
+The implementation target is the complete platform, not a collection of disconnected stubs. Every phase must ship with tests, security review, integration checks and documented operational behavior. Production blockers discovered during implementation are promoted into the current batch instead of being hidden in a backlog.
+
+**Final target:** secure, observable, recoverable, policy-controlled autonomous browser runtime integrated into Octopus/AIOS, with deterministic CI and rollback-capable deployment.
