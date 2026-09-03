@@ -24,15 +24,21 @@ NEW="$(git rev-parse HEAD)"
 # актуальны на сервере (идемпотентно, безопасно перезаписывать).
 # 🔐 /root/agents/ может принадлежать root — используем sudo (ubuntu в NOPASSWD),
 # с fallback на обычный cp, если sudo недоступен.
+# ⚠️ /root/agents/ — ОБЩАЯ директория экосистемы Октопус (другие проекты тоже
+# пишут туда свои файлы/логи). chmod применяем ТОЛЬКО к своим скопированным
+# файлам, а не рекурсивно по всей директории — иначе можно задеть чужие права
+# и упасть на файлах с расширенными атрибутами (см. lsattr).
 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-  sudo mkdir -p "${AGENTS_DIR}"
-  sudo cp -r docs/agent-instructions/* "${AGENTS_DIR}/"
-  sudo chmod -R a+rwX "${AGENTS_DIR}"
+  SUDO="sudo"
 else
-  mkdir -p "${AGENTS_DIR}"
-  cp -r docs/agent-instructions/* "${AGENTS_DIR}/"
-  chmod -R u+rwX "${AGENTS_DIR}"
+  SUDO=""
 fi
+${SUDO} mkdir -p "${AGENTS_DIR}"
+for f in docs/agent-instructions/*; do
+  name="$(basename "${f}")"
+  ${SUDO} cp -r "${f}" "${AGENTS_DIR}/${name}"
+  ${SUDO} chmod a+rwX "${AGENTS_DIR}/${name}" 2>/dev/null || true
+done
 log "📚 Инструкции синхронизированы в ${AGENTS_DIR}"
 
 if [ "${CURRENT}" = "${NEW}" ]; then
@@ -42,8 +48,11 @@ fi
 
 log "⬆️ Код обновлён ${CURRENT} -> ${NEW}"
 
-# 🛠️ Зависимости (раскомментируйте, когда появится код)
-# npm ci
+# 🛠️ Зависимости (Python venv, если уже создано bootstrap-скриптом)
+if [ -d ".venv" ]; then
+  .venv/bin/pip install -q -r requirements.txt
+  log "🐍 Зависимости обновлены (.venv)"
+fi
 
 # 🚀 Рестарт сервиса
 if systemctl list-unit-files | grep -q '^octopus-browser'; then
