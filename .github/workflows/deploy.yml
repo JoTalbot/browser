@@ -44,12 +44,13 @@ jobs:
           user="${DEPLOY_USER:-ubuntu}"
           path="${DEPLOY_PATH:-/opt/octopus-browser}"
           echo "Updating ${user}@${host}:${path}"
-          # 🔄 Всегда вызываем server-update.sh на сервере: он делает git pull,
-          # копирует docs/agent-instructions/* в /root/agents/ и рестартует сервис.
-          # Голый "git pull" НЕ синхронизирует инструкции — поэтому используем его
-          # только как способ доставить актуальный server-update.sh перед запуском.
+          # 🔄 Единственный источник правды по деплою — deploy/server-update.sh:
+          # он сам делает git pull, копирует docs/agent-instructions/* в
+          # /root/agents/ (ВСЕГДА, идемпотентно) и рестартует сервис при изменении
+          # кода. НЕ делаем отдельный "голый" git pull здесь, чтобы не рассинхронить
+          # состояние "код обновлён, но инструкции не скопированы".
           ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" \
-            "mkdir -p '${path}' && cd '${path}' && ( [ -d .git ] || git clone https://github.com/${GITHUB_REPOSITORY}.git . ) && git fetch --all && git checkout main && git pull --ff-only origin main" \
+            "mkdir -p '${path}' && cd '${path}' && [ -d .git ] || git clone https://github.com/${GITHUB_REPOSITORY}.git '${path}'" \
             && ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" \
                  "DEPLOY_PATH='${path}' bash '${path}/deploy/server-update.sh'" \
             || { echo "fallback: copying and running server-update.sh directly"; \

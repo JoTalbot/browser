@@ -12,24 +12,27 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "${LOG}"; }
 log "🔄 Начало обновления"
 
 cd "${APP_DIR}"
+CURRENT="$(git rev-parse HEAD 2>/dev/null || echo none)"
 git fetch --all
-CURRENT="$(git rev-parse HEAD)"
 git checkout main
 git pull --ff-only origin main
 NEW="$(git rev-parse HEAD)"
 
-if [ "${CURRENT}" = "${NEW}" ]; then
-  log "✅ Изменений нет (${NEW})"
-  exit 0
-fi
-
-log "⬆️ Обновление ${CURRENT} -> ${NEW}"
-
-# 📚 Синхронизация инструкций на сервер
+# 📚 Синхронизация инструкций на сервер — ВСЕГДА, независимо от того, менялся ли
+# код: этот скрипт может быть вызван уже ПОСЛЕ внешнего git pull (например, из
+# GitHub Actions), и тогда CURRENT==NEW, но инструкции всё равно должны быть
+# актуальны на сервере (идемпотентно, безопасно перезаписывать).
 mkdir -p "${AGENTS_DIR}"
 cp -r docs/agent-instructions/* "${AGENTS_DIR}/"
 chmod -R u+rwX "${AGENTS_DIR}"
-log "📚 Инструкции обновлены в ${AGENTS_DIR}"
+log "📚 Инструкции синхронизированы в ${AGENTS_DIR}"
+
+if [ "${CURRENT}" = "${NEW}" ]; then
+  log "✅ Код не менялся (${NEW})"
+  exit 0
+fi
+
+log "⬆️ Код обновлён ${CURRENT} -> ${NEW}"
 
 # 🛠️ Зависимости (раскомментируйте, когда появится код)
 # npm ci
