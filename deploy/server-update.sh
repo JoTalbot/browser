@@ -22,9 +22,17 @@ NEW="$(git rev-parse HEAD)"
 # код: этот скрипт может быть вызван уже ПОСЛЕ внешнего git pull (например, из
 # GitHub Actions), и тогда CURRENT==NEW, но инструкции всё равно должны быть
 # актуальны на сервере (идемпотентно, безопасно перезаписывать).
-mkdir -p "${AGENTS_DIR}"
-cp -r docs/agent-instructions/* "${AGENTS_DIR}/"
-chmod -R u+rwX "${AGENTS_DIR}"
+# 🔐 /root/agents/ может принадлежать root — используем sudo (ubuntu в NOPASSWD),
+# с fallback на обычный cp, если sudo недоступен.
+if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+  sudo mkdir -p "${AGENTS_DIR}"
+  sudo cp -r docs/agent-instructions/* "${AGENTS_DIR}/"
+  sudo chmod -R a+rwX "${AGENTS_DIR}"
+else
+  mkdir -p "${AGENTS_DIR}"
+  cp -r docs/agent-instructions/* "${AGENTS_DIR}/"
+  chmod -R u+rwX "${AGENTS_DIR}"
+fi
 log "📚 Инструкции синхронизированы в ${AGENTS_DIR}"
 
 if [ "${CURRENT}" = "${NEW}" ]; then
