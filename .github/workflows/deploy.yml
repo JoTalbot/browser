@@ -1,0 +1,52 @@
+# 🐙 ШАБЛОН workflow авто-деплоя Octopus Browser (GitHub → сервер)
+#
+# 📌 КАК ВКЛЮЧИТЬ:
+#   1) Скопируйте этот файл в .github/workflows/deploy.yml (в репозитории).
+#   2) Добавьте Secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH.
+#   3) Запушьте в main — workflow запустится автоматически.
+#
+# ⚠️ Для создания файлов в .github/workflows нужен GitHub PAT/token
+#    с разрешением "Workflows" (см. docs/agent-instructions/004-DEPLOY.md).
+#
+# 🔗 Убедитесь, что в workflow нет реальных секретов — только ${{ secrets.* }}.
+
+name: Deploy Octopus
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Sync and update on server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          host="${DEPLOY_HOST:?secrets.DEPLOY_HOST not set}"
+          user="${DEPLOY_USER:-ubuntu}"
+          path="${DEPLOY_PATH:-/opt/octopus-browser}"
+          echo "Updating ${user}@${host}:${path}"
+          ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" \
+            "cd '${path}' && git fetch --all && git checkout main && git pull --ff-only origin main && echo 'pull ok'" \
+            || { echo "fallback: using server-update.sh"; \
+                 scp -o StrictHostKeyChecking=accept-new deploy/server-update.sh "${user}@${host}:/tmp/octopus-update.sh"; \
+                 ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" "DEPLOY_PATH='${path}' bash /tmp/octopus-update.sh"; }
+          echo "Deploy finished"
