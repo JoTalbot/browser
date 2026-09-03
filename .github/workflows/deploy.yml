@@ -1,15 +1,4 @@
-# 🐙 ШАБЛОН workflow авто-деплоя Octopus Browser (GitHub → сервер)
-#
-# 📌 КАК ВКЛЮЧИТЬ:
-#   1) Скопируйте этот файл в .github/workflows/deploy.yml (в репозитории).
-#   2) Добавьте Secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH.
-#   3) Запушьте в main — workflow запустится автоматически.
-#
-# ⚠️ Для создания файлов в .github/workflows нужен GitHub PAT/token
-#    с разрешением "Workflows" (см. docs/agent-instructions/004-DEPLOY.md).
-#
-# 🔗 Убедитесь, что в workflow нет реальных секретов — только ${{ secrets.* }}.
-
+# 🐙 Octopus Browser — GitHub → server deployment
 name: Deploy Octopus
 
 on:
@@ -21,8 +10,28 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    name: Quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ruff
+        run: ruff check .
+      - name: Pytest
+        run: pytest -q
+
   deploy:
     name: Deploy to server
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,11 +53,6 @@ jobs:
           user="${DEPLOY_USER:-ubuntu}"
           path="${DEPLOY_PATH:-/opt/octopus-browser}"
           echo "Updating ${user}@${host}:${path}"
-          # 🔄 Единственный источник правды по деплою — deploy/server-update.sh:
-          # он сам делает git pull, копирует docs/agent-instructions/* в
-          # /root/agents/ (ВСЕГДА, идемпотентно) и рестартует сервис при изменении
-          # кода. НЕ делаем отдельный "голый" git pull здесь, чтобы не рассинхронить
-          # состояние "код обновлён, но инструкции не скопированы".
           ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" \
             "mkdir -p '${path}' && cd '${path}' && [ -d .git ] || git clone https://github.com/${GITHUB_REPOSITORY}.git '${path}'" \
             && ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" \
