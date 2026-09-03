@@ -1,9 +1,4 @@
-"""🌐 Запуск и управление браузером (Playwright).
-
-Обеспечивает: изолированные контексты, прокси, человеческие задержки,
-скриншоты для vision-агента.
-"""
-
+"""🌐 Запуск и управление браузером (Playwright)."""
 from __future__ import annotations
 
 import base64
@@ -29,77 +24,75 @@ class HumanPacer:
 
     def type_text(self, text: str, chunk: int = 3) -> None:
         """Печать текста «по кусочкам» — как человек."""
-        import random as rnd
         for i in range(0, len(text), chunk):
-            # эмулируем скорость ввода (здесь — без физического ввода)
-            _ = text[i:i + chunk]
-            time.sleep(rnd.uniform(0.02, 0.08))
+            _ = text[i : i + chunk]
+            time.sleep(random.uniform(0.02, 0.08))
 
 
 class BrowserController:
     """Управление браузером через Playwright."""
 
-    def __init__(self, config: AppConfig, profile_dir: Optional[Path] = None,
-                 proxy: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        profile_dir: Optional[Path] = None,
+        proxy: Optional[str] = None,
+    ) -> None:
         self.config = config
         self.profile_dir = profile_dir or config.profiles_dir / config.default_profile
         self.proxy = proxy or config.proxy_first
         self.pacer = HumanPacer(config.min_delay, config.max_delay)
         self._pw: Any = None
-        self._browser: Any = None
         self._context: Any = None
         self._page: Any = None
 
-    # ---- lifecycle -------------------------------------------------------
     def start(self) -> None:
         """Запустить браузер с изолированным профилем и контекстом."""
-        from playwright.sync_api import sync_playwright  # ленивый импорт
+        from playwright.sync_api import sync_playwright
 
         self.config.ensure_dirs()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
-
         self._pw = sync_playwright().start()
         browser_type = getattr(self._pw, self.config.browser)
-        launch_args: dict[str, Any] = {"headless": self.config.headless}
-        if self.proxy:
-            launch_args["proxy"] = {"server": self.proxy}
-
-        # persistent context = изолированный мульти-профиль
+        proxy = {"server": self.proxy} if self.proxy else None
         self._context = browser_type.launch_persistent_context(
             user_data_dir=str(self.profile_dir),
             headless=self.config.headless,
-            proxy=launch_args.get("proxy"),
+            proxy=proxy,
             viewport={"width": 1280, "height": 800},
         )
+        self._context.set_default_timeout(self.config.navigation_timeout_ms)
+        self._context.set_default_navigation_timeout(self.config.navigation_timeout_ms)
         self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
+        self._apply_page_timeouts()
 
     def stop(self) -> None:
-        if self._context:
-            self._context.close()
-        if self._pw:
-            self._pw.stop()
-        self._context = self._page = None
+        try:
+            if self._context:
+                self._context.close()
+        finally:
+            if self._pw:
+                self._pw.stop()
+            self._pw = self._context = self._page = None
 
-    # ---- actions ---------------------------------------------------------
     def goto(self, url: str) -> None:
-        self._require().goto(url)
+        self._require().goto(url, timeout=self.config.navigation_timeout_ms)
         self.pacer.pause()
 
     def screenshot(self, full_page: bool = False) -> str:
-        """📸 Скриншот → base64 (для vision)."""
         raw = self._require().screenshot(full_page=full_page)
         return base64.b64encode(raw).decode()
 
     def click(self, selector: str) -> None:
         self.pacer.pause(0.4)
-        self._require().click(selector)
+        self._require().click(selector, timeout=self.config.navigation_timeout_ms)
         self.pacer.pause()
 
     def fill(self, selector: str, text: str) -> None:
         self.pacer.pause(0.3)
         page = self._require()
-        page.click(selector)
-        page.fill(selector, text)
+        page.click(selector, timeout=self.config.navigation_timeout_ms)
+        page.fill(selector, text, timeout=self.config.navigation_timeout_ms)
         self.pacer.pause()
 
     def scroll(self, amount: int = 400) -> None:
@@ -114,14 +107,15 @@ class BrowserController:
 
     def new_tab(self) -> None:
         self._page = self._context.new_page()
+        self._apply_page_timeouts()
         self.pacer.pause()
 
     def close_tab(self) -> None:
         if self._page and len(self._context.pages) > 1:
             self._page.close()
             self._page = self._context.pages[-1]
+            self._apply_page_timeouts()
 
-    # ---- introspection ---------------------------------------------------
     def url(self) -> str:
         return self._require().url
 
@@ -130,6 +124,11 @@ class BrowserController:
 
     def session_id(self) -> str:
         return str(uuid.uuid4())
+
+    def _apply_page_timeouts(self) -> None:
+        if self._page is not None:
+            self._page.set_default_timeout(self.config.navigation_timeout_ms)
+            self._page.set_default_navigation_timeout(self.config.navigation_timeout_ms)
 
     def _require(self) -> Any:
         if self._page is None:
