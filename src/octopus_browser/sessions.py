@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +15,8 @@ from octopus_browser.config import AppConfig
 class SessionManager:
     """Сохранение storage_state по профилям с безопасными именами файлов."""
 
+    _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
     def __init__(self, config: AppConfig) -> None:
         self.config = config
         self.config.ensure_dirs()
@@ -23,7 +26,9 @@ class SessionManager:
         return datetime.now(timezone.utc).isoformat()
 
     def _path(self, session_id: str) -> Path:
-        if not isinstance(session_id, str) or not session_id or len(session_id) > 128:
+        if not isinstance(session_id, str) or not self._SESSION_ID_RE.fullmatch(session_id):
+            raise ValueError("Некорректный session_id")
+        if session_id in {".", ".."} or ".." in Path(session_id).parts:
             raise ValueError("Некорректный session_id")
         path = (self._root / f"{session_id}.json").resolve()
         try:
