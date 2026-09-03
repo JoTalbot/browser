@@ -41,12 +41,21 @@ def test_profile_name_rejects_path_traversal() -> None:
 
 
 def test_api_validates_navigation_url() -> None:
-    from octopus_browser.api import app
+    from octopus_browser.api import app, config
 
+    config.api_key = "test-key"
     client = TestClient(app)
-    assert client.post("/navigate", json={"url": "file:///etc/passwd"}).status_code == 422
-    assert client.post("/navigate", json={"url": "not-a-url"}).status_code == 422
-    assert client.post("/navigate", json={"url": "https://example.com", "profile": "../x"}).status_code == 422
+    headers = {"X-API-Key": "test-key"}
+    assert client.post("/navigate", json={"url": "file:///etc/passwd"}, headers=headers).status_code == 422
+    assert client.post("/navigate", json={"url": "not-a-url"}, headers=headers).status_code == 422
+    assert (
+        client.post(
+            "/navigate",
+            json={"url": "https://example.com", "profile": "../x"},
+            headers=headers,
+        ).status_code
+        == 422
+    )
 
 
 def test_agent_rejects_empty_task() -> None:
