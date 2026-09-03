@@ -1,11 +1,21 @@
-"""🔐 API authentication and conservative outbound URL policy."""
+"""🔐 Authentication, egress policy and secret-safe security primitives."""
 from __future__ import annotations
 
 import ipaddress
 import socket
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from fastapi import Header, HTTPException
+
+
+@dataclass(frozen=True)
+class EgressTarget:
+    """Resolved destination used by callers that need a stable network policy."""
+
+    url: str
+    host: str
+    addresses: tuple[str, ...]
 
 
 def require_api_key(
@@ -19,15 +29,18 @@ def require_api_key(
         raise HTTPException(401, "Invalid API key")
 
 
-def validate_external_url(value: str, allowed_hosts: list[str] | None = None) -> str:
-    """Validate URL syntax, host policy, and resolved address safety."""
+def resolve_safe_target(value: str, allowed_hosts: list[str] | None = None) -> EgressTarget:
+    """Resolve and validate an outbound target before browser/network use."""
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("url должен быть абсолютным http/https URL")
-    host = parsed.hostname.rstrip(".").lower()
     if parsed.username or parsed.password:
         raise ValueError("URL с учётными данными запрещён")
-    if allowed_hosts and not any(host == h or host.endswith("." + h) for h in allowed_hosts):
+    host = parsed.hostname.rstrip(".").lower()
+    normalized_allowed = [h.rstrip(".").lower() for h in (allowed_hosts or [])]
+    if normalized_allowed and not any(
+        host == item or host.endswith("." + item) for item in normalized_allowed
+    ):
         raise ValueError("host не разрешён политикой egress")
     try:
         infos = socket.getaddrinfo(
@@ -37,8 +50,12 @@ def validate_external_url(value: str, allowed_hosts: list[str] | None = None) ->
         )
     except OSError as exc:
         raise ValueError("host не разрешён или не разрешается") from exc
-    for info in infos:
-        address = ipaddress.ip_address(info[4][0])
-        if not address.is_global:
-            raise ValueError("частные/локальные адреса запрещены")
-    return value
+    addresses = tuple(sorted({info[4][0] for info in infos}))
+    if not addresses or any(not ipaddress.ip_address(addr).is_global for addr in addresses):
+        raise ValueError("частные/локальные адреса запрещены")
+    return EgressTarget(url=value, host=host, addresses=addresses)
+
+
+def validate_external_url(value: str, allowed_hosts: list[str] | None = None) -> str:
+    """Backward-compatible URL validator returning the original URL."""
+    return resolve_safe_target(value, allowed_hosts).url
