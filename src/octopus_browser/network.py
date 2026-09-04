@@ -100,7 +100,7 @@ class ProxyManager:
             with httpx.Client(proxy=target, timeout=8) as client:
                 resp = client.get("https://example.com", follow_redirects=True)
             return {"ok": resp.is_success, "server": self._redact(target), "status": resp.status_code}
-        except Exception as exc:
+        except (OSError, ValueError, httpx.HTTPError) as exc:
             return {"ok": False, "server": self._redact(target), "error": str(exc)}
 
     @staticmethod
