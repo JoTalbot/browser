@@ -5,7 +5,8 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from octopus_browser.config import AppConfig
 
@@ -54,7 +55,7 @@ class VisionEngine:
         try:
             raw = json.loads(plan)
             if not isinstance(raw, dict):
-                raise ValueError("decision должен быть JSON-объектом")
+                raise TypeError("decision должен быть JSON-объектом")
             action = str(raw.get("action", "wait"))
             if action not in ACTIONS:
                 action = "wait"
@@ -95,7 +96,7 @@ class VisionEngine:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
             if not isinstance(content, str):
-                raise ValueError("Vision API вернула неподдерживаемый формат content")
+                raise TypeError("Vision API вернула неподдерживаемый формат content")
             return content
         finally:
             log.debug("vision provider latency_ms=%.1f", (time.monotonic() - started) * 1000)
