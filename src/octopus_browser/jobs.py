@@ -45,7 +45,7 @@ class JobManager:
             self._jobs[job_id].status = "running"
         try:
             result = fn()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - job boundary must capture task failures
             with self._lock:
                 self._jobs[job_id].status = "error"
                 self._jobs[job_id].error = str(exc)
