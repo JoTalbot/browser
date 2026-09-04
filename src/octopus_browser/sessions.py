@@ -84,7 +84,7 @@ class SessionManager:
             raise ValueError("Импорт сессии должен содержать storage_state")
         session_id = payload.get("id") or str(uuid.uuid4())
         if not isinstance(session_id, str):
-            raise ValueError("Некорректный id сессии")
+            raise TypeError("Некорректный id сессии")
         self._path(session_id)
         payload["schema_version"] = self.SCHEMA_VERSION
         payload["id"] = session_id
