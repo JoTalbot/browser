@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 import threading
-from typing import Any, List, Optional
 from urllib.parse import urlparse
+from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
@@ -28,7 +28,7 @@ _request_lock = threading.Lock()
 
 
 class ProfileIn(BaseModel):
-    name: Optional[str] = Field(default=None, max_length=64)
+    name: str | None = Field(default=None, max_length=64)
 
 
 class CreateProfileOut(BaseModel):
@@ -67,7 +67,7 @@ class NavigateIn(BaseModel):
 class AgentTaskIn(BaseModel):
     task: str = Field(min_length=1, max_length=4000)
     profile: str = "main"
-    max_steps: Optional[int] = Field(default=None, ge=1, le=100)
+    max_steps: int | None = Field(default=None, ge=1, le=100)
 
     @field_validator("profile")
     @classmethod
@@ -146,7 +146,7 @@ def octopus_info(_: None = Depends(protected)) -> dict:
 
 
 @app.get("/profiles")
-def list_profiles(_: None = Depends(protected)) -> List[dict]:
+def list_profiles(_: None = Depends(protected)) -> list[dict]:
     return profiles.list()
 
 
@@ -173,7 +173,7 @@ def delete_profile(name: str, _: None = Depends(protected)) -> dict:
 
 
 @app.get("/sessions")
-def list_sessions(_: None = Depends(protected)) -> List[dict]:
+def list_sessions(_: None = Depends(protected)) -> list[dict]:
     return sessions.list()
 
 
