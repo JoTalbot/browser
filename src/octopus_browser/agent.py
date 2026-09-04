@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 
 from octopus_browser.config import AppConfig
 from octopus_browser.core.launcher import BrowserController
@@ -12,7 +12,7 @@ from octopus_browser.vision import VisionDecision, VisionEngine
 log = logging.getLogger("octopus.agent")
 
 
-class AgentState(StrEnum):
+class AgentState(str, Enum):
     OBSERVE = "observe"
     PLAN = "plan"
     VALIDATE = "validate"
