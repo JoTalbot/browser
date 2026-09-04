@@ -5,10 +5,10 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Iterator
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
 
