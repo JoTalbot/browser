@@ -7,6 +7,8 @@ import socket
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
+import httpx
+
 from octopus_browser.config import AppConfig
 
 
@@ -96,7 +98,6 @@ class ProxyManager:
             addresses = {info[4][0] for info in socket.getaddrinfo(host, urlparse(target).port, type=socket.SOCK_STREAM)}
             if any(not ipaddress.ip_address(addr).is_global for addr in addresses):
                 return {"ok": False, "server": self._redact(target), "error": "non-global proxy address"}
-            import httpx
             with httpx.Client(proxy=target, timeout=8) as client:
                 resp = client.get("https://example.com", follow_redirects=True)
             return {"ok": resp.is_success, "server": self._redact(target), "status": resp.status_code}
