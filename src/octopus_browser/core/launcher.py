@@ -6,7 +6,8 @@ import random
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+
+from typing import Any
 
 from octopus_browser.config import AppConfig
 from octopus_browser.policy import ActionPolicy
@@ -28,7 +29,7 @@ class HumanPacer:
 class BrowserController:
     """Управление браузером через Playwright с policy и безопасной навигацией."""
 
-    def __init__(self, config: AppConfig, profile_dir: Optional[Path] = None, proxy: Optional[str] = None) -> None:
+    def __init__(self, config: AppConfig, profile_dir: Path | None = None, proxy: str | None = None) -> None:
         self.config = config
         self.profile_dir = profile_dir or config.profiles_dir / config.default_profile
         self.proxy = proxy or config.proxy_first
