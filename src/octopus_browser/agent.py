@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import ClassVar
 
 from octopus_browser.config import AppConfig
 from octopus_browser.core.launcher import BrowserController
@@ -31,7 +32,7 @@ class AgentAction:
     reason: str = ""
 
     @classmethod
-    def from_decision(cls, decision: VisionDecision) -> "AgentAction":
+    def from_decision(cls, decision: VisionDecision) -> AgentAction:
         return cls(decision.action, decision.target, decision.text, decision.reason)
 
 
@@ -48,7 +49,7 @@ class AgentRun:
 class OctopusAgent:
     """Bounded observe/plan/validate/act/verify loop."""
 
-    ALLOWED_ACTIONS = {"goto", "click", "fill", "scroll", "wait", "new_tab", "close_tab", "done"}
+    ALLOWED_ACTIONS: ClassVar[set[str]] = {"goto", "click", "fill", "scroll", "wait", "new_tab", "close_tab", "done"}
 
     def __init__(self, config: AppConfig, controller: BrowserController, vision: VisionEngine | None = None) -> None:
         self.config = config
