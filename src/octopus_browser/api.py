@@ -17,7 +17,7 @@ from octopus_browser.rate_limit import RateLimiter
 from octopus_browser.security import require_api_key, validate_external_url
 from octopus_browser.sessions import SessionManager
 
-app = FastAPI(title="🐙 Octopus Browser API", version="0.3.1")
+app = FastAPI(title="🐙 Octopus Browser API", version="0.3.2")
 config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
