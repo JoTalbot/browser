@@ -3,27 +3,32 @@ from __future__ import annotations
 
 import json
 import threading
-from typing import Any, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
 from octopus_browser.config import AppConfig
+from octopus_browser.observability import correlation_id, request_context
 from octopus_browser.profiles import ProfileManager
+from octopus_browser.rate_limit import RateLimiter
 from octopus_browser.security import require_api_key, validate_external_url
 from octopus_browser.sessions import SessionManager
 
-app = FastAPI(title="🐙 Octopus Browser API", version="0.2.0")
+app = FastAPI(title="🐙 Octopus Browser API", version="0.3.0")
 config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
 sessions = SessionManager(config)
 _browser_slots = threading.BoundedSemaphore(max(1, config.max_concurrency))
+_rate_limiter = RateLimiter(config.rate_limit_per_minute)
+_request_count = 0
+_request_lock = threading.Lock()
 
 
 class ProfileIn(BaseModel):
-    name: Optional[str] = Field(default=None, max_length=64)
+    name: str | None = Field(default=None, max_length=64)
 
 
 class CreateProfileOut(BaseModel):
@@ -62,7 +67,7 @@ class NavigateIn(BaseModel):
 class AgentTaskIn(BaseModel):
     task: str = Field(min_length=1, max_length=4000)
     profile: str = "main"
-    max_steps: Optional[int] = Field(default=None, ge=1, le=100)
+    max_steps: int | None = Field(default=None, ge=1, le=100)
 
     @field_validator("profile")
     @classmethod
@@ -86,6 +91,26 @@ def _acquire_browser_slot() -> None:
         raise HTTPException(429, "Достигнут лимит одновременно работающих браузеров")
 
 
+@app.middleware("http")
+async def admission_control(request: Request, call_next):
+    global _request_count
+    with request_context(request.headers.get("x-request-id")) as request_id:
+        key = request.headers.get("x-api-key") or (request.client.host if request.client else "unknown")
+        if not _rate_limiter.allow(key):
+            retry_after = max(1, int(_rate_limiter.retry_after(key) + 0.999))
+            return Response(
+                content=json.dumps({"detail": "Слишком много запросов", "request_id": request_id}),
+                status_code=429,
+                media_type="application/json",
+                headers={"Retry-After": str(retry_after), "X-Request-ID": request_id},
+            )
+        with _request_lock:
+            _request_count += 1
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = correlation_id.get()
+        return response
+
+
 @app.get("/health")
 def health() -> dict:
     return {
@@ -96,18 +121,32 @@ def health() -> dict:
     }
 
 
+@app.get("/ready")
+def readiness() -> dict:
+    return {"status": "ready", "service": "octopus-browser", "profiles": len(profiles.list())}
+
+
+@app.get("/metrics")
+def metrics(_: None = Depends(protected)) -> dict:
+    return {
+        "requests_total": _request_count,
+        "browser_concurrency_limit": config.max_concurrency,
+        "rate_limit_per_minute": config.rate_limit_per_minute,
+    }
+
+
 @app.get("/octopus/info")
 def octopus_info(_: None = Depends(protected)) -> dict:
     return {
         "adapter": "octopus-browser",
         "version": app.version,
-        "capabilities": ["profiles", "sessions", "navigation", "vision", "agent"],
+        "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "readiness", "metrics"],
         "octopus": {"runtime": "AIOS", "module": "browser-adapter"},
     }
 
 
 @app.get("/profiles")
-def list_profiles(_: None = Depends(protected)) -> List[dict]:
+def list_profiles(_: None = Depends(protected)) -> list[dict]:
     return profiles.list()
 
 
@@ -134,7 +173,7 @@ def delete_profile(name: str, _: None = Depends(protected)) -> dict:
 
 
 @app.get("/sessions")
-def list_sessions(_: None = Depends(protected)) -> List[dict]:
+def list_sessions(_: None = Depends(protected)) -> list[dict]:
     return sessions.list()
 
 
@@ -218,6 +257,8 @@ def agent_run(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
             "steps": result.steps,
             "final_url": result.final_url,
             "log": result.log,
+            "state": result.state.value,
+            "request_id": correlation_id.get(),
         }
 
     return _with_browser_slot(run)
@@ -225,4 +266,4 @@ def agent_run(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
 
 @app.get("/")
 def root() -> dict:
-    return {"service": "octopus-browser", "docs": "/docs", "health": "/health"}
+    return {"service": "octopus-browser", "docs": "/docs", "health": "/health", "ready": "/ready"}

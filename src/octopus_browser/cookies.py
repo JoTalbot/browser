@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import Any
 
 from octopus_browser.config import AppConfig
 
@@ -17,7 +17,7 @@ class CookieManager:
         self.config = config
         self.context = context
 
-    def list(self, urls: List[str] | None = None) -> List[dict]:
+    def list(self, urls: list[str] | None = None) -> list[dict]:
         """📋 Cookies контекста."""
         return self.context.cookies(urls=urls or [])
 
@@ -40,7 +40,7 @@ class CookieManager:
         """
         cookies = self.context.cookies()
         removed = 0
-        kept: List[dict] = []
+        kept: list[dict] = []
         for c in cookies:
             match = c["name"] == name
             if domain:
@@ -76,7 +76,7 @@ class CookieManager:
         payload = json.loads(data)
         cookies = payload.get("cookies", payload if isinstance(payload, list) else [])
         if not isinstance(cookies, list):
-            raise ValueError("Формат импорта: { 'cookies': [...] }")
+            raise TypeError("Формат импорта: { 'cookies': [...] }")
         # привязываем сроки действия, если их нет
         for c in cookies:
             c.setdefault("expires", int(time.time()) + 3600 * 24 * 365)

@@ -6,11 +6,13 @@ import importlib
 import pytest
 from fastapi.testclient import TestClient
 
-from octopus_browser.agent import OctopusAgent
+from octopus_browser.agent import AgentState, OctopusAgent
 from octopus_browser.config import AppConfig
+from octopus_browser.network import ProxyManager
 from octopus_browser.profiles import ProfileManager
-from octopus_browser.sessions import SessionManager
+from octopus_browser.rate_limit import RateLimiter
 from octopus_browser.security import validate_external_url
+from octopus_browser.sessions import SessionManager
 from octopus_browser.vision import VisionDecision
 
 
@@ -20,6 +22,7 @@ def test_config_defaults(tmp_path) -> None:
     assert cfg.app_port > 0
     assert cfg.max_concurrency >= 1
     assert cfg.navigation_timeout_ms >= 1
+    assert cfg.rate_limit_per_minute >= 1
     cfg.ensure_dirs()
     assert cfg.profiles_dir.exists()
 
@@ -75,6 +78,18 @@ def test_api_authentication() -> None:
     assert client.get("/octopus/info", headers={"X-API-Key": "test-key"}).status_code == 200
 
 
+def test_api_readiness_and_metrics() -> None:
+    from octopus_browser.api import app, config
+
+    config.api_key = "test-key"
+    client = TestClient(app)
+    assert client.get("/ready").status_code == 200
+    response = client.get("/metrics", headers={"X-API-Key": "test-key"})
+    assert response.status_code == 200
+    assert "requests_total" in response.json()
+    assert response.headers["x-request-id"]
+
+
 def test_api_validates_navigation_url() -> None:
     from octopus_browser.api import app, config
 
@@ -104,6 +119,19 @@ def test_external_url_rejects_non_global_address(monkeypatch) -> None:
         validate_external_url("http://example.test")
 
 
+def test_proxy_validation_rejects_embedded_credentials() -> None:
+    with pytest.raises(ValueError, match="credentials|Учётные"):
+        ProxyManager.validate_server("http://user:pass@example.com:8080")
+
+
+def test_rate_limiter() -> None:
+    limiter = RateLimiter(2, window_seconds=60)
+    assert limiter.allow("a") is True
+    assert limiter.allow("a") is True
+    assert limiter.allow("a") is False
+    assert limiter.allow("b") is True
+
+
 def test_agent_rejects_empty_task() -> None:
     class DummyController:
         def start(self): pass
@@ -127,6 +155,7 @@ def test_agent_reports_step_limit() -> None:
 
     run = OctopusAgent(AppConfig(), DummyController(), DummyVision()).run("test", max_steps=2)
     assert run.status == "limit"
+    assert run.state == AgentState.LIMIT
     assert run.steps == 2
 
 
@@ -138,5 +167,7 @@ def test_modules_import() -> None:
         "octopus_browser.network",
         "octopus_browser.vision",
         "octopus_browser.agent",
+        "octopus_browser.rate_limit",
+        "octopus_browser.observability",
     ):
         importlib.import_module(mod)

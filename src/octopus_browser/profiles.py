@@ -8,7 +8,6 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
 
 from octopus_browser.config import AppConfig
 
@@ -38,7 +37,6 @@ class ProfileManager:
 
     @staticmethod
     def validate_name(name: str) -> str:
-        """Проверить имя профиля до любой работы с файловой системой."""
         if not isinstance(name, str) or not _NAME_RE.fullmatch(name):
             raise ValueError("Имя профиля: только A-Z, 0-9, '_', '-' (до 64 символов)")
         return name
@@ -58,8 +56,8 @@ class ProfileManager:
     def _profile_dir(self, name: str) -> Path:
         return self._safe_dir(name)
 
-    def list(self) -> List[dict]:
-        out: List[dict] = []
+    def list(self) -> list[dict]:
+        out: list[dict] = []
         for meta in self._root.glob("*/profile.json"):
             try:
                 out.append(json.loads(meta.read_text()))
@@ -71,7 +69,7 @@ class ProfileManager:
         name = name or f"profile-{uuid.uuid4().hex[:8]}"
         self.validate_name(name)
         profile_dir = self._profile_dir(name)
-        if profile_dir.exists():
+        if profile_dir.exists() or profile_dir.is_symlink():
             raise FileExistsError(f"Профиль '{name}' уже существует")
         profile_dir.mkdir(parents=True)
         meta = asdict(Profile(name=name, created=self._now(), dir=str(profile_dir)))
@@ -81,6 +79,8 @@ class ProfileManager:
     def get(self, name: str) -> Path:
         name = self.validate_name(name)
         profile_dir = self._profile_dir(name)
+        if profile_dir.is_symlink():
+            raise ValueError("Симлинки профилей запрещены")
         profile_dir.mkdir(parents=True, exist_ok=True)
         meta_path = self._meta_path(name)
         if not meta_path.exists():
@@ -90,6 +90,8 @@ class ProfileManager:
     def delete(self, name: str) -> bool:
         name = self.validate_name(name)
         profile_dir = self._profile_dir(name)
+        if profile_dir.is_symlink():
+            raise ValueError("Симлинки профилей запрещены")
         if not profile_dir.exists():
             return False
         shutil.rmtree(profile_dir)
