@@ -104,6 +104,27 @@ async def admission_control(request: Request, call_next):
                 media_type="application/json",
                 headers={"Retry-After": str(retry_after), "X-Request-ID": request_id},
             )
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                body_size = int(content_length)
+            except ValueError:
+                return Response(
+                    content=json.dumps({"detail": "Некорректный Content-Length", "request_id": request_id}),
+                    status_code=400,
+                    media_type="application/json",
+                    headers={"X-Request-ID": request_id},
+                )
+            if body_size < 0 or body_size > config.request_body_max_bytes:
+                return Response(
+                    content=json.dumps({"detail": "Размер тела запроса превышает допустимый лимит", "request_id": request_id}),
+                    status_code=413,
+                    media_type="application/json",
+                    headers={
+                        "X-Request-ID": request_id,
+                        "Content-Length-Limit": str(config.request_body_max_bytes),
+                    },
+                )
         with _request_lock:
             _request_count += 1
         response = await call_next(request)
@@ -118,6 +139,7 @@ def health() -> dict:
         "service": "octopus-browser",
         "version": app.version,
         "browser_concurrency": config.max_concurrency,
+        "request_body_max_bytes": config.request_body_max_bytes,
     }
 
 
@@ -132,6 +154,7 @@ def metrics(_: None = Depends(protected)) -> dict:
         "requests_total": _request_count,
         "browser_concurrency_limit": config.max_concurrency,
         "rate_limit_per_minute": config.rate_limit_per_minute,
+        "request_body_max_bytes": config.request_body_max_bytes,
     }
 
 
