@@ -24,12 +24,12 @@
 ## Phase 2 — Browser Runtime
 - [x] Configurable Playwright action/navigation timeout.
 - [x] Proxy URL validation and health-check foundation.
-- [ ] Lifecycle manager with deterministic startup/shutdown.
-- [ ] Context/page/tab registry.
+- [x] Deterministic controller start/stop lifecycle.
+- [x] Basic context/page/tab tracking.
 - [ ] Navigation cancellation/deadlines.
 - [ ] Download/upload policy.
-- [ ] Popup/dialog/permission policy.
-- [ ] Network interception and allow/deny rules.
+- [x] Popup/dialog policy foundation.
+- [x] Network interception and allow/deny enforcement foundation.
 - [ ] Health-aware proxy rotation.
 - [ ] Crash recovery and per-profile locking.
 
@@ -42,6 +42,7 @@
 - [ ] Goal completion verification.
 - [ ] Stale page/selector recovery.
 - [ ] Provider abstraction and structured model outputs.
+- [x] Asynchronous job submission/status/cancellation API.
 
 ## Phase 4 — Vision & Web Intelligence
 - [x] Structured vision decision parsing and confidence field.
@@ -64,7 +65,7 @@
 ## Phase 6 — Octopus / AIOS Integration
 - [x] Stable API foundation and capability discovery endpoint.
 - [x] Shared request/correlation ID foundation.
-- [ ] Job submission/status/cancellation API.
+- [x] Job submission/status/cancellation API foundation.
 - [ ] Webhook/event integration.
 - [ ] Multi-agent concurrency coordination.
 - [ ] Backpressure and durable queueing.
@@ -81,7 +82,8 @@
 - [x] Unit/smoke suite and security regression baseline.
 - [x] CI lint + test gate.
 - [ ] API integration suite and real Playwright E2E.
-- [ ] Dependency/SBOM/security scanning.
+- [x] CI dependency audit baseline.
+- [ ] SBOM/security scanning with artifact publication.
 - [ ] Load, soak and failure-injection tests.
 - [ ] Python/Playwright/browser compatibility matrix.
 - [ ] Performance budgets enforced in CI.
