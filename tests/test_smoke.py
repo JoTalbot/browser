@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import importlib
+import time
 
 import pytest
 from fastapi.testclient import TestClient
 
 from octopus_browser.agent import AgentState, OctopusAgent
 from octopus_browser.config import AppConfig
+from octopus_browser.jobs import JobManager
 from octopus_browser.network import ProxyManager
 from octopus_browser.observability import AuditSink
 from octopus_browser.profiles import ProfileManager
@@ -105,6 +107,32 @@ def test_audit_sink_redacts_secrets(tmp_path) -> None:
     assert "REDACTED" in text
 
 
+def test_job_manager_lifecycle_and_cancel() -> None:
+    manager = JobManager(workers=1, max_queued=2)
+    gate = __import__("threading").Event()
+    started = __import__("threading").Event()
+
+    def blocked():
+        started.set()
+        gate.wait(2)
+        return "done"
+
+    first = manager.submit(blocked)
+    assert started.wait(1)
+    second = manager.submit(lambda: "queued")
+    assert manager.get(first.id).status == "running"
+    assert manager.cancel(second.id) is True
+    assert manager.get(second.id).status == "cancelled"
+    gate.set()
+    for _ in range(20):
+        if manager.get(first.id).status == "done":
+            break
+        time.sleep(0.01)
+    assert manager.get(first.id).result == "done"
+    assert manager.get(first.id).finished_at is not None
+    manager.shutdown()
+
+
 def test_api_authentication() -> None:
     from octopus_browser.api import app, config
 
@@ -141,6 +169,15 @@ def test_api_request_body_limit() -> None:
     config.request_body_max_bytes = original_limit
 
 
+def test_api_job_status_and_not_found() -> None:
+    from octopus_browser.api import app, config
+
+    config.api_key = "test-key"
+    client = TestClient(app)
+    headers = {"X-API-Key": "test-key"}
+    assert client.get("/agent/jobs/missing", headers=headers).status_code == 404
+
+
 def test_api_validates_navigation_url() -> None:
     from octopus_browser.api import app, config
 
@@ -149,14 +186,7 @@ def test_api_validates_navigation_url() -> None:
     headers = {"X-API-Key": "test-key"}
     assert client.post("/navigate", json={"url": "file:///etc/passwd"}, headers=headers).status_code == 422
     assert client.post("/navigate", json={"url": "not-a-url"}, headers=headers).status_code == 422
-    assert (
-        client.post(
-            "/navigate",
-            json={"url": "https://example.com", "profile": "../x"},
-            headers=headers,
-        ).status_code
-        == 422
-    )
+    assert client.post("/navigate", json={"url": "https://example.com", "profile": "../x"}, headers=headers).status_code == 422
 
 
 def test_external_url_rejects_non_global_address(monkeypatch) -> None:
@@ -218,6 +248,7 @@ def test_modules_import() -> None:
         "octopus_browser.network",
         "octopus_browser.vision",
         "octopus_browser.agent",
+        "octopus_browser.jobs",
         "octopus_browser.rate_limit",
         "octopus_browser.observability",
         "octopus_browser.vault",
