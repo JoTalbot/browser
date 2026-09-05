@@ -6,7 +6,6 @@ import random
 import time
 import uuid
 from pathlib import Path
-
 from typing import Any
 
 from octopus_browser.config import AppConfig
