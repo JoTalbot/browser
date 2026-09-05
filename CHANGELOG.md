@@ -11,11 +11,23 @@ All notable changes to Octopus Browser are documented here.
 - Add session TTL, revocation and expiry purge support.
 - Store session files with owner-only permissions where supported.
 - Add a secret-redacting append-only JSONL audit sink.
+- Pin CI action references to immutable commit SHAs.
+- Add CI dependency vulnerability auditing with `pip-audit`.
+
+### Runtime / API
+- Add bounded asynchronous agent jobs with queue capacity limits.
+- Add authenticated job submission, status, listing and cancellation endpoints.
+- Expose job counts in metrics.
+- Track job creation, start and finish timestamps.
+- Preserve explicit `cancelled` state rather than reporting a cancelled job as completed.
 
 ### Operations
 - Make GitHub release publishing idempotent when a release already exists.
 - Expose request body limits in health/metrics responses.
 - Modernize package license metadata to SPDX form.
+- Remove tracked Python `__pycache__` runtime artifacts.
 
 ### Verification
 - Add regression coverage for body limits, session encryption/tamper detection, revocation and audit redaction.
+- Add job lifecycle and cancellation tests.
+- CI remains green across Python 3.10–3.13 before release.
