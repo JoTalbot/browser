@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 import threading
-from urllib.parse import urlparse
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
