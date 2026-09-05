@@ -17,9 +17,9 @@
 - [x] Request rate limiting.
 - [ ] OIDC authentication.
 - [ ] DNS-rebinding enforcement at browser network layer.
-- [ ] Request body size limit.
-- [ ] Secret-safe audit log sink.
-- [ ] Encrypted session/cookie storage.
+- [x] Request body size limit.
+- [x] Secret-safe audit log sink.
+- [x] Encrypted session/cookie storage.
 
 ## Phase 2 — Browser Runtime
 - [x] Configurable Playwright action/navigation timeout.
@@ -55,9 +55,9 @@
 - [ ] Cost/latency budgets.
 
 ## Phase 5 — Data Plane
-- [ ] Versioned session import/export schema.
-- [ ] Authenticated encryption for cookie/storage-state vault.
-- [ ] Session TTL, revocation and profile lifecycle policies.
+- [x] Versioned session import/export schema.
+- [x] Authenticated encryption for cookie/storage-state vault.
+- [x] Session TTL, revocation and profile lifecycle policies.
 - [ ] Backup/restore.
 - [ ] Retention and secure deletion.
 
@@ -88,12 +88,12 @@
 
 ## Phase 9 — Release Engineering
 - [x] Semantic-version foundation.
-- [ ] Changelog/release notes.
+- [x] Changelog/release notes.
 - [ ] Reproducible release artifacts.
 - [ ] Deployment preflight and health-gated rollout.
 - [ ] Automatic rollback.
 - [ ] Migration/version compatibility checks.
-- [ ] Production runbook and release checklist.
+- [x] Production runbook and release checklist.
 
 ## Phase 10 — Advanced Platform
 - [ ] Multi-browser support where justified.
