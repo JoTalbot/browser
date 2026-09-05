@@ -16,7 +16,7 @@ from octopus_browser.rate_limit import RateLimiter
 from octopus_browser.security import require_api_key, validate_external_url
 from octopus_browser.sessions import SessionManager
 
-app = FastAPI(title="🐙 Octopus Browser API", version="0.3.0")
+app = FastAPI(title="🐙 Octopus Browser API", version="0.3.1")
 config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
@@ -166,7 +166,7 @@ def octopus_info(_: None = Depends(protected)) -> dict:
     return {
         "adapter": "octopus-browser",
         "version": app.version,
-        "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "readiness", "metrics"],
+        "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "readiness", "metrics", "session-revocation", "audit"],
         "octopus": {"runtime": "AIOS", "module": "browser-adapter"},
     }
 
