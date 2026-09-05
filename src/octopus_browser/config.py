@@ -35,6 +35,7 @@ class AppConfig:
     max_concurrency: int = _env_int("MAX_BROWSER_CONCURRENCY", 4, 1, 128)
     navigation_timeout_ms: int = _env_int("NAVIGATION_TIMEOUT_MS", 30000, 100, 300000)
     request_timeout_seconds: float = max(1.0, float(os.getenv("REQUEST_TIMEOUT_SECONDS", "120")))
+    request_body_max_bytes: int = _env_int("REQUEST_BODY_MAX_BYTES", 2_000_000, 1_024, 10_000_000)
     rate_limit_per_minute: int = _env_int("RATE_LIMIT_PER_MINUTE", 120, 1, 10000)
     allowed_hosts: list[str] = field(default_factory=lambda: [h.strip().lower() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()])
     proxy_list: list[str] = field(default_factory=lambda: [p.strip() for p in os.getenv("PROXY_LIST", "").split(",") if p.strip()])
