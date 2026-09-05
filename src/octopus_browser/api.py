@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
 from octopus_browser.config import AppConfig
+from octopus_browser.jobs import Job, JobManager
 from octopus_browser.observability import AuditSink, correlation_id, request_context
 from octopus_browser.profiles import ProfileManager
 from octopus_browser.rate_limit import RateLimiter
@@ -24,6 +25,7 @@ sessions = SessionManager(config)
 _audit = AuditSink(config.logs_dir / "audit.jsonl")
 _browser_slots = threading.BoundedSemaphore(max(1, config.max_concurrency))
 _rate_limiter = RateLimiter(config.rate_limit_per_minute)
+_jobs = JobManager(workers=max(1, config.max_concurrency), max_queued=max(1, config.max_concurrency * 8))
 _request_count = 0
 _request_lock = threading.Lock()
 
@@ -92,6 +94,18 @@ def _acquire_browser_slot() -> None:
         raise HTTPException(429, "Достигнут лимит одновременно работающих браузеров")
 
 
+def _job_view(job: Job) -> dict[str, Any]:
+    return {
+        "id": job.id,
+        "status": job.status,
+        "created_at": job.created_at,
+        "started_at": job.started_at,
+        "finished_at": job.finished_at,
+        "result": job.result,
+        "error": job.error,
+    }
+
+
 @app.middleware("http")
 async def admission_control(request: Request, call_next):
     global _request_count
@@ -121,10 +135,7 @@ async def admission_control(request: Request, call_next):
                     content=json.dumps({"detail": "Размер тела запроса превышает допустимый лимит", "request_id": request_id}),
                     status_code=413,
                     media_type="application/json",
-                    headers={
-                        "X-Request-ID": request_id,
-                        "Content-Length-Limit": str(config.request_body_max_bytes),
-                    },
+                    headers={"X-Request-ID": request_id, "Content-Length-Limit": str(config.request_body_max_bytes)},
                 )
         with _request_lock:
             _request_count += 1
@@ -137,13 +148,7 @@ async def admission_control(request: Request, call_next):
 
 @app.get("/health")
 def health() -> dict:
-    return {
-        "status": "ok",
-        "service": "octopus-browser",
-        "version": app.version,
-        "browser_concurrency": config.max_concurrency,
-        "request_body_max_bytes": config.request_body_max_bytes,
-    }
+    return {"status": "ok", "service": "octopus-browser", "version": app.version, "browser_concurrency": config.max_concurrency, "request_body_max_bytes": config.request_body_max_bytes}
 
 
 @app.get("/ready")
@@ -153,22 +158,21 @@ def readiness() -> dict:
 
 @app.get("/metrics")
 def metrics(_: None = Depends(protected)) -> dict:
+    jobs = _jobs.list()
     return {
         "requests_total": _request_count,
         "browser_concurrency_limit": config.max_concurrency,
         "rate_limit_per_minute": config.rate_limit_per_minute,
         "request_body_max_bytes": config.request_body_max_bytes,
+        "jobs_total": len(jobs),
+        "jobs_active": sum(j.status in {"queued", "running"} for j in jobs),
+        "jobs_failed": sum(j.status == "error" for j in jobs),
     }
 
 
 @app.get("/octopus/info")
 def octopus_info(_: None = Depends(protected)) -> dict:
-    return {
-        "adapter": "octopus-browser",
-        "version": app.version,
-        "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "readiness", "metrics", "session-revocation", "audit"],
-        "octopus": {"runtime": "AIOS", "module": "browser-adapter"},
-    }
+    return {"adapter": "octopus-browser", "version": app.version, "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "agent-jobs", "readiness", "metrics", "session-revocation", "audit"], "octopus": {"runtime": "AIOS", "module": "browser-adapter"}}
 
 
 @app.get("/profiles")
@@ -246,10 +250,53 @@ def _with_browser_slot(callback):
         _browser_slots.release()
 
 
+def _agent_job(data: AgentTaskIn) -> dict:
+    from octopus_browser.agent import OctopusAgent
+    from octopus_browser.core.launcher import BrowserController
+
+    controller = BrowserController(config, profile_dir=profiles.get(data.profile))
+    try:
+        agent = OctopusAgent(config, controller)
+        result = agent.run(data.task, max_steps=data.max_steps)
+        return {"status": result.status, "steps": result.steps, "final_url": result.final_url, "log": result.log, "state": result.state.value, "request_id": correlation_id.get()}
+    finally:
+        controller.stop()
+
+
+@app.post("/agent/jobs", status_code=202)
+def submit_agent_job(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
+    try:
+        job = _jobs.submit(lambda: _with_browser_slot(lambda: _agent_job(data)))
+    except RuntimeError as exc:
+        raise HTTPException(429, str(exc)) from exc
+    return _job_view(job)
+
+
+@app.get("/agent/jobs")
+def list_agent_jobs(_: None = Depends(protected)) -> list[dict]:
+    return [_job_view(job) for job in _jobs.list()]
+
+
+@app.get("/agent/jobs/{job_id}")
+def get_agent_job(job_id: str, _: None = Depends(protected)) -> dict:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Задача не найдена")
+    return _job_view(job)
+
+
+@app.post("/agent/jobs/{job_id}/cancel")
+def cancel_agent_job(job_id: str, _: None = Depends(protected)) -> dict:
+    if not _jobs.get(job_id):
+        raise HTTPException(404, "Задача не найдена")
+    if not _jobs.cancel(job_id):
+        raise HTTPException(409, "Задача уже выполняется или завершена; принудительное убийство процесса не выполняется")
+    return {"cancelled": job_id}
+
+
 @app.post("/navigate")
 def navigate(data: NavigateIn, _: None = Depends(protected)) -> dict:
     from octopus_browser.core.launcher import BrowserController
-
     url = _url(data.url)
 
     def run() -> dict:
@@ -267,7 +314,6 @@ def navigate(data: NavigateIn, _: None = Depends(protected)) -> dict:
 @app.post("/screenshot")
 def screenshot(data: NavigateIn, _: None = Depends(protected)) -> dict:
     from octopus_browser.core.launcher import BrowserController
-
     url = _url(data.url)
 
     def run() -> dict:
@@ -284,23 +330,7 @@ def screenshot(data: NavigateIn, _: None = Depends(protected)) -> dict:
 
 @app.post("/agent/run")
 def agent_run(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
-    from octopus_browser.agent import OctopusAgent
-    from octopus_browser.core.launcher import BrowserController
-
-    def run() -> dict:
-        controller = BrowserController(config, profile_dir=profiles.get(data.profile))
-        agent = OctopusAgent(config, controller)
-        result = agent.run(data.task, max_steps=data.max_steps)
-        return {
-            "status": result.status,
-            "steps": result.steps,
-            "final_url": result.final_url,
-            "log": result.log,
-            "state": result.state.value,
-            "request_id": correlation_id.get(),
-        }
-
-    return _with_browser_slot(run)
+    return _with_browser_slot(lambda: _agent_job(data))
 
 
 @app.get("/")
