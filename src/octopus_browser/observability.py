@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
+import os
 import time
 import uuid
 from collections.abc import Iterator, Mapping
@@ -16,7 +16,7 @@ from threading import Lock
 from typing import Any
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
-_SECRET_KEYS = re.compile(r"(?:api[_-]?key|authorization|cookie|password|secret|token|session[_-]?encryption)", re.I)
+_SECRET_KEYS = re.compile(r"(?:api[_-]?key|authorization|cookie|password|secret|token|session[_-]?encryption)", re.IGNORECASE)
 
 
 def _redact(value: Any) -> Any:
@@ -66,18 +66,13 @@ class AuditSink:
         if cid:
             payload.setdefault("correlation_id", cid)
         line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
-        if os.name != "nt":
-            with self._lock:
-                with self.path.open("a", encoding="utf-8") as handle:
-                    os.chmod(self.path, 0o600)
-                    handle.write(line)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-        else:
-            with self._lock:
-                with self.path.open("a", encoding="utf-8") as handle:
-                    handle.write(line)
-                    handle.flush()
+        with self._lock, self.path.open("a", encoding="utf-8") as handle:
+            if os.name != "nt":
+                os.chmod(self.path, 0o600)
+            handle.write(line)
+            handle.flush()
+            if os.name != "nt":
+                os.fsync(handle.fileno())
 
 
 @dataclass
