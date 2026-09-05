@@ -9,10 +9,12 @@ from fastapi.testclient import TestClient
 from octopus_browser.agent import AgentState, OctopusAgent
 from octopus_browser.config import AppConfig
 from octopus_browser.network import ProxyManager
+from octopus_browser.observability import AuditSink
 from octopus_browser.profiles import ProfileManager
 from octopus_browser.rate_limit import RateLimiter
 from octopus_browser.security import validate_external_url
 from octopus_browser.sessions import SessionManager
+from octopus_browser.vault import SessionVault
 from octopus_browser.vision import VisionDecision
 
 
@@ -23,7 +25,7 @@ def test_config_defaults(tmp_path) -> None:
     assert cfg.max_concurrency >= 1
     assert cfg.navigation_timeout_ms >= 1
     assert cfg.request_body_max_bytes >= 1024
-    assert cfg.rate_limit_per_minute >= 1
+    assert cfg.session_ttl_seconds >= 0
     cfg.ensure_dirs()
     assert cfg.profiles_dir.exists()
 
@@ -57,16 +59,50 @@ def test_session_id_rejects_path_traversal(tmp_path) -> None:
         mgr.load("a/b")
 
 
-def test_session_roundtrip(tmp_path) -> None:
+def test_session_requires_encryption_key(tmp_path) -> None:
     cfg = AppConfig()
     cfg.data_dir = tmp_path
     mgr = SessionManager(cfg)
+    with pytest.raises(RuntimeError, match="SESSION_ENCRYPTION_KEY"):
+        mgr.save({"cookies": []}, "main")
+
+
+def test_session_roundtrip_encrypted_and_revocable(tmp_path) -> None:
+    cfg = AppConfig()
+    cfg.data_dir = tmp_path
+    cfg.session_encryption_key = SessionVault.generate_key()
+    cfg.session_ttl_seconds = 3600
+    mgr = SessionManager(cfg)
     sid = mgr.save({"cookies": [{"name": "x"}]}, "main", "test")
+    path = cfg.sessions_dir / f"{sid}.session"
+    raw = path.read_bytes()
+    assert b'"cookies"' not in raw
+    assert (path.stat().st_mode & 0o777) == 0o600
     assert mgr.load(sid) == {"cookies": [{"name": "x"}]}
     exported = mgr.export(sid)
     imported = mgr.import_session(exported, "secondary")
     assert imported == sid
     assert mgr.load(imported) == {"cookies": [{"name": "x"}]}
+    assert mgr.revoke(sid) is True
+    with pytest.raises(PermissionError):
+        mgr.load(sid)
+
+
+def test_vault_tamper_is_rejected() -> None:
+    vault = SessionVault(SessionVault.generate_key())
+    encrypted = vault.encrypt(b"secret", associated_data=b"session-1")
+    with pytest.raises(ValueError):
+        vault.decrypt(encrypted[:-1] + bytes([encrypted[-1] ^ 1]), associated_data=b"session-1")
+    assert vault.decrypt(encrypted, associated_data=b"session-1") == b"secret"
+
+
+def test_audit_sink_redacts_secrets(tmp_path) -> None:
+    sink = AuditSink(tmp_path / "audit.jsonl")
+    sink.write({"event": "auth", "api_key": "super-secret", "nested": {"token": "hidden"}, "path": "/health"})
+    text = (tmp_path / "audit.jsonl").read_text()
+    assert "super-secret" not in text
+    assert "hidden" not in text
+    assert "REDACTED" in text
 
 
 def test_api_authentication() -> None:
@@ -184,5 +220,6 @@ def test_modules_import() -> None:
         "octopus_browser.agent",
         "octopus_browser.rate_limit",
         "octopus_browser.observability",
+        "octopus_browser.vault",
     ):
         importlib.import_module(mod)
