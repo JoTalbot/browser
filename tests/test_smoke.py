@@ -22,6 +22,7 @@ def test_config_defaults(tmp_path) -> None:
     assert cfg.app_port > 0
     assert cfg.max_concurrency >= 1
     assert cfg.navigation_timeout_ms >= 1
+    assert cfg.request_body_max_bytes >= 1024
     assert cfg.rate_limit_per_minute >= 1
     cfg.ensure_dirs()
     assert cfg.profiles_dir.exists()
@@ -88,6 +89,20 @@ def test_api_readiness_and_metrics() -> None:
     assert response.status_code == 200
     assert "requests_total" in response.json()
     assert response.headers["x-request-id"]
+
+
+def test_api_request_body_limit() -> None:
+    from octopus_browser.api import app, config
+
+    config.api_key = "test-key"
+    original_limit = config.request_body_max_bytes
+    config.request_body_max_bytes = 64
+    client = TestClient(app)
+    headers = {"X-API-Key": "test-key", "Content-Length": "65"}
+    response = client.post("/sessions", json={"profile": "main"}, headers=headers)
+    assert response.status_code == 413
+    assert response.headers["x-request-id"]
+    config.request_body_max_bytes = original_limit
 
 
 def test_api_validates_navigation_url() -> None:
