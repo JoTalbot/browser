@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
 from octopus_browser.config import AppConfig
-from octopus_browser.observability import correlation_id, request_context
+from octopus_browser.observability import AuditSink, correlation_id, request_context
 from octopus_browser.profiles import ProfileManager
 from octopus_browser.rate_limit import RateLimiter
 from octopus_browser.security import require_api_key, validate_external_url
@@ -21,6 +21,7 @@ config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
 sessions = SessionManager(config)
+_audit = AuditSink(config.logs_dir / "audit.jsonl")
 _browser_slots = threading.BoundedSemaphore(max(1, config.max_concurrency))
 _rate_limiter = RateLimiter(config.rate_limit_per_minute)
 _request_count = 0
@@ -129,6 +130,8 @@ async def admission_control(request: Request, call_next):
             _request_count += 1
         response = await call_next(request)
         response.headers["X-Request-ID"] = correlation_id.get()
+        if config.audit_log_enabled:
+            _audit.write({"event": "http_request", "method": request.method, "path": request.url.path, "status": response.status_code})
         return response
 
 
@@ -207,7 +210,20 @@ def save_session(data: SessionIn, _: None = Depends(protected)) -> dict:
         sid = sessions.save(data.storage_state, data.profile, data.label)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
     return {"id": sid}
+
+
+@app.post("/sessions/{session_id}/revoke")
+def revoke_session(session_id: str, _: None = Depends(protected)) -> dict:
+    try:
+        revoked = sessions.revoke(session_id)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not revoked:
+        raise HTTPException(404, f"Сессия '{session_id}' не найдена")
+    return {"revoked": session_id}
 
 
 @app.post("/cookies/import")
