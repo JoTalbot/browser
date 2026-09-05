@@ -1,6 +1,6 @@
 [project]
 name = "octopus-browser"
-version = "0.3.1"
+version = "0.3.2"
 description = "Octopus Browser — secure AI-controlled browser runtime"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
