@@ -37,6 +37,9 @@ class AppConfig:
     request_timeout_seconds: float = max(1.0, float(os.getenv("REQUEST_TIMEOUT_SECONDS", "120")))
     request_body_max_bytes: int = _env_int("REQUEST_BODY_MAX_BYTES", 2_000_000, 1_024, 10_000_000)
     rate_limit_per_minute: int = _env_int("RATE_LIMIT_PER_MINUTE", 120, 1, 10000)
+    session_ttl_seconds: int = _env_int("SESSION_TTL_SECONDS", 2_592_000, 0, 31_536_000)
+    session_encryption_key: str = os.getenv("SESSION_ENCRYPTION_KEY", "")
+    audit_log_enabled: bool = _env_bool("AUDIT_LOG_ENABLED", True)
     allowed_hosts: list[str] = field(default_factory=lambda: [h.strip().lower() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()])
     proxy_list: list[str] = field(default_factory=lambda: [p.strip() for p in os.getenv("PROXY_LIST", "").split(",") if p.strip()])
 
