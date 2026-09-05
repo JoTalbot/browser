@@ -19,6 +19,7 @@ class SessionManager:
 
     _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
     SCHEMA_VERSION = 2
+    EXPORT_VERSION = 1
 
     def __init__(self, config: AppConfig) -> None:
         self.config = config
@@ -139,34 +140,32 @@ class SessionManager:
         path = self._path(session_id)
         payload = self._deserialize(session_id, path.read_bytes())
         self._validate_live(payload)
-        return base64.b64encode(path.read_bytes()).decode()
+        envelope = {
+            "export_version": self.EXPORT_VERSION,
+            "id": session_id,
+            "blob": base64.b64encode(path.read_bytes()).decode("ascii"),
+        }
+        return base64.b64encode(json.dumps(envelope, separators=(",", ":")).encode("utf-8")).decode("ascii")
 
     def import_session(self, b64: str, profile: str) -> str:
         ProfileManager.validate_name(profile)
         try:
-            raw = base64.b64decode(b64, validate=True)
-        except (ValueError, TypeError) as exc:
+            envelope = json.loads(base64.b64decode(b64, validate=True))
+            session_id = envelope["id"]
+            raw = base64.b64decode(envelope["blob"], validate=True)
+        except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
             raise ValueError("Некорректный формат импорта сессии") from exc
-        if self._vault is None:
-            raise RuntimeError("SESSION_ENCRYPTION_KEY не настроен")
-        try:
-            decoded = self._vault.decrypt(raw)
-            payload = json.loads(decoded)
-        except (ValueError, json.JSONDecodeError, TypeError) as exc:
-            raise ValueError("Некорректный формат импорта сессии") from exc
-        if not isinstance(payload, dict) or "storage_state" not in payload:
-            raise ValueError("Импорт сессии должен содержать storage_state")
-        session_id = payload.get("id") or str(uuid.uuid4())
-        if not isinstance(session_id, str):
-            raise TypeError("Некорректный id сессии")
+        if envelope.get("export_version") != self.EXPORT_VERSION or not isinstance(session_id, str):
+            raise ValueError("Неподдерживаемая версия экспорта сессии")
         self._path(session_id)
-        payload["schema_version"] = self.SCHEMA_VERSION
-        payload["id"] = session_id
+        try:
+            payload = self._deserialize(session_id, raw)
+        except ValueError as exc:
+            raise ValueError("Некорректная или повреждённая сессия") from exc
         payload["profile"] = profile
         payload["revoked"] = False
-        payload["created"] = payload.get("created") or self._now().isoformat()
-        created = datetime.fromisoformat(payload["created"])
-        payload["expires"] = self._expires(created)
+        payload["created"] = self._now().isoformat()
+        payload["expires"] = self._expires(self._now())
         path = self._path(session_id)
         path.write_bytes(self._serialize(payload))
         path.chmod(0o600)
