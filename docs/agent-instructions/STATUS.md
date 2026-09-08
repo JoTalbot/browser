@@ -5,7 +5,23 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, Фаза 1)
+## 🟢 Последняя запись (2026-09-08, Фаза 2)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Фаза 2 — ProxyProvider + mock + vault-credentials + health-rotation (по решению 1)
+- ✅ **Сделано:**
+  - 🧩 Абстракция ProxyProvider: StaticListProvider (PROXY_LIST) + MockProxyProvider (скриптованный, без сети).
+  - 🔐 ProxyCredentialStore: credentials в шифрованном JSON через SessionVault; secret_ref в entry; redact везде.
+  - 🔀 Health-aware ротация: scoring, экспоненциальный cooldown, refresh_health(), персистентность data_dir/proxies.json.
+  - 🔌 API: GET/POST/DELETE /proxies, GET /proxies/health, POST /proxies/rotate, POST /proxies/credentials; метрики proxies_*.
+  - 🧪 tests/test_proxy.py: unit + API-тесты (mock, vault-roundtrip, backoff, персистентность, 400/404/503).
+- 🔍 **Как проверить:** PR → Actions зелёный; после merge — GET /proxies/health, skill deploy-verify.
+- ⚠️ **Замечания:** live-провайдеры — отдельным решением (mock по DECISIONS.md #1); refresh_health с реальными прокси — последовательные проверки.
+- 🚀 **Что дальше:** Фаза 4 — Vision на локальном Ollama (Фаза 3 пропущена по решению 2).
+
+---
+
+### 📜 2026-09-08 — Фаза 1
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Фаза 1 — адаптер AIOS в монорепо + skills/deploy-verify

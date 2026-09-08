@@ -60,6 +60,14 @@ class AppConfig:
         return self.data_dir / "logs"
 
     @property
+    def proxies_path(self) -> Path:
+        return self.data_dir / "proxies.json"
+
+    @property
+    def proxy_credentials_path(self) -> Path:
+        return self.data_dir / "proxies_credentials.json"
+
+    @property
     def proxy_first(self) -> str | None:
         return self.proxy_list[0] if self.proxy_list else None
 

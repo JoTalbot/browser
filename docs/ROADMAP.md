@@ -30,7 +30,7 @@
 - [ ] Download/upload policy.
 - [x] Popup/dialog policy foundation.
 - [x] Network interception and allow/deny enforcement foundation.
-- [ ] Health-aware proxy rotation.
+- [x] Health-aware proxy rotation.
 - [ ] Crash recovery and per-profile locking.
 
 ## Phase 3 — Agent Runtime
