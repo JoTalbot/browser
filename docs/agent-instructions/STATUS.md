@@ -13,6 +13,7 @@
   - 🔍 Live-проверка: `POST /vision/analyze` → 200 через gemini-fallback (latency ~1.2s); нога balancer падает молча.
   - 📝 Адаптер `vision.py`: `log.warning` на каждую упавшую ногу (провайдер + тип ошибки + усечённое сообщение, без секретов).
   - 📝 STATUS: исправлено имя теста `tests/test_vision.py` → `tests/test_browser_vision.py`.
+  - 📝 HTTP-ошибки ног включают усечённый ответ гейтвея (диагностика balancer HTTP 400).
 - 🔍 **Как проверить:** после merge — live `/vision/analyze` + `journalctl -u octopus-browser-aios-adapter | grep 'vision leg'`.
 - ⚠️ **Замечания:** ключи vision берутся из `/etc/octopus/secrets.env` (unit читает его первым); значения ключей не читались.
 - 🚀 **Что дальше:** по причине из журнала — чинить balancer-ветку или оставить gemini-fallback; затем Фаза 5.

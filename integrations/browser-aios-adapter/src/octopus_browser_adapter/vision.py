@@ -219,7 +219,8 @@ class VisionRouter:
         ) as client:
             response = await client.post(path, headers=headers, json=payload)
         if response.status_code >= 400:
-            raise VisionError(f"{provider}: HTTP {response.status_code}")
+            detail = response.text[:200].replace("\n", " ")
+            raise VisionError(f"{provider}: HTTP {response.status_code} ({detail})")
         data = response.json()
         if provider == "gemini":
             text = data["candidates"][0]["content"]["parts"][0]["text"]
