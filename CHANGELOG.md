@@ -31,6 +31,7 @@ All notable changes to Octopus Browser are documented here.
 ### Fixed
 - Deploy restarts were silently skipped: `systemctl list-unit-files | grep -q` under `set -o pipefail` dies from SIGPIPE (exit 141), so the service never restarted and production ran Sep-3 code. Restart detection now uses `systemctl cat`, apply state is tracked in `.applied_commit`, concurrent runs are serialized with `flock`.
 - Deploy/release quality gates install the adapter package so root `pytest -q` collects its tests.
+- Backup preserves empty directories (manifest `dirs`); restore recreates them, strict `diff -r` matches.
 
 ## [0.3.2] - 2026-09-05
 

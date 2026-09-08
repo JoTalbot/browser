@@ -29,13 +29,19 @@ def generate_backup_key() -> str:
     return SessionVault.generate_key()
 
 
-def _collect(data_dir: Path) -> dict[str, bytes]:
+def _collect(data_dir: Path) -> tuple[dict[str, bytes], list[str]]:
     if not data_dir.is_dir():
         raise BackupError(f"Нет каталога данных: {data_dir}")
     files: dict[str, bytes] = {}
+    dirs: list[str] = []
     total = 0
     for path in sorted(data_dir.rglob("*"), key=lambda p: p.as_posix()):
-        if path.is_symlink() or not path.is_file():
+        if path.is_symlink():
+            continue
+        if path.is_dir():
+            dirs.append(path.relative_to(data_dir).as_posix())
+            continue
+        if not path.is_file():
             continue
         rel = path.relative_to(data_dir).as_posix()
         blob = path.read_bytes()
@@ -43,7 +49,7 @@ def _collect(data_dir: Path) -> dict[str, bytes]:
         if total > MAX_BYTES:
             raise BackupError(f"Каталог больше лимита {MAX_BYTES} байт")
         files[rel] = blob
-    return files
+    return files, dirs
 
 
 def _pack(files: dict[str, bytes]) -> bytes:
@@ -82,12 +88,13 @@ def create_backup(data_dir: Path, out_path: Path, encoded_key: str) -> dict[str,
         raise BackupError(f"Файл уже существует, удалите вручную: {out_path}")
     if not encoded_key:
         raise BackupError("Не задан ключ бэкапа")
-    files = _collect(data_dir)
+    files, dirs = _collect(data_dir)
     manifest = {rel: hashlib.sha256(blob).hexdigest() for rel, blob in files.items()}
     inner = {
         "v": BACKUP_VERSION,
         "created": datetime.now(timezone.utc).isoformat(),
         "files": manifest,
+        "dirs": dirs,
         "tar_b64": base64.b64encode(_pack(files)).decode("ascii"),
     }
     try:
@@ -100,7 +107,7 @@ def create_backup(data_dir: Path, out_path: Path, encoded_key: str) -> dict[str,
     out_path.write_text(json.dumps(outer), encoding="utf-8")
     digest = hashlib.sha256(out_path.read_bytes()).hexdigest()
     return {"files": len(files), "bytes": sum(len(b) for b in files.values()),
-            "sha256": digest, "out": str(out_path)}
+            "dirs": len(dirs), "sha256": digest, "out": str(out_path)}
 
 
 def _open_backup(backup_path: Path, encoded_key: str) -> tuple[dict[str, Any], dict[str, bytes]]:
@@ -128,14 +135,18 @@ def _open_backup(backup_path: Path, encoded_key: str) -> tuple[dict[str, Any], d
 def verify_backup(backup_path: Path, encoded_key: str) -> dict[str, Any]:
     inner, files = _open_backup(backup_path, encoded_key)
     return {"files": len(files), "bytes": sum(len(b) for b in files.values()),
-            "created": inner.get("created", ""), "ok": True}
+            "created": inner.get("created", ""), "dirs": len(inner.get("dirs", [])), "ok": True}
 
 
 def restore_backup(backup_path: Path, to_dir: Path, encoded_key: str) -> dict[str, Any]:
     if to_dir.exists() and any(to_dir.iterdir()):
         raise BackupError(f"Каталог назначения не пуст (защита прода): {to_dir}")
-    _inner, files = _open_backup(backup_path, encoded_key)
+    inner, files = _open_backup(backup_path, encoded_key)
     to_dir.mkdir(parents=True, exist_ok=True)
+    for dirname in inner.get("dirs", []):
+        if not dirname or dirname.startswith("/") or ".." in str(dirname).split("/"):
+            raise BackupError(f"Небезопасный путь: {dirname!r}")
+        (to_dir / dirname).mkdir(parents=True, exist_ok=True)
     for rel, blob in files.items():
         target = (to_dir / rel).resolve()
         try:
