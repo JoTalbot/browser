@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from typing import Any
 
 from .bridge import AIOSBridgeClient
@@ -33,7 +35,7 @@ class AIOSBrowserAdapter:
         return {
             "adapter": "octopus-browser-aios",
             "profiles": ["primary", "secondary"],
-            "operations": ["status", "observe", "navigate", "click", "fill"],
+            "operations": ["status", "observe", "vision-analyze", "navigate", "click", "fill"],
             "raw_profile_copy": False,
             "cookie_export": False,
             "action_approval_required": self.settings.action_require_approval,
@@ -58,6 +60,23 @@ class AIOSBrowserAdapter:
                 screenshot, "image/png", prompt
             ).as_dict(),
         }
+
+    def analyze_image(
+        self,
+        image_b64: str,
+        mime_type: str = "image/png",
+        prompt: str = "Опиши интерфейс кратко.",
+    ) -> dict[str, object]:
+        """Анализ переданного кадра через VisionRouter (для browser backend)."""
+        try:
+            image = base64.b64decode(image_b64.encode("ascii"), validate=True)
+        except (ValueError, binascii.Error, UnicodeEncodeError) as exc:
+            raise ValueError("image_b64 должен быть корректным base64") from exc
+        if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
+            raise ValueError("mime_type: только image/png, image/jpeg, image/webp")
+        if not prompt or len(prompt) > 4000:
+            raise ValueError("prompt должен быть непустым и короче 4000 символов")
+        return self.vision.analyze_sync(image, mime_type, prompt).as_dict()
 
     def action(
         self, profile: str, action: str, *, approved: bool = False, **kwargs: Any

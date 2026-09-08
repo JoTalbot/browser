@@ -5,7 +5,23 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, Фаза 2)
+## 🟢 Последняя запись (2026-09-08, Фаза 4)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Фаза 4 revised — Vision через внешний API адаптера (без локальных моделей, решение 7)
+- ✅ **Сделано:**
+  - 🔌 Адаптер: POST /vision/analyze поверх VisionRouter (gemini/groq/balancer + failover) + тесты 200/400/503.
+  - 👁️ Браузер: VisionProvider (adapter/openai/mock), VisionFrame fusion, VisionGrounding, VisionBudget, VisionCache, реестр промптов.
+  - 🔌 API: POST /vision/analyze (describe/decide/ground), GET /vision/status; метрики vision_*; capability vision-analyze.
+  - 🧪 tests/test_vision.py: провайдеры на MockTransport, failover, бюджет, кэш, граундинг, API (400/422/429).
+  - 📝 DECISIONS.md #7; ROADMAP Phase 4 почти закрыта (кроме OCR — deferred).
+- 🔍 **Как проверить:** PR → Actions зелёный; после merge + ключей — GET /vision/status, live /vision/analyze.
+- ⚠️ **Замечания:** live-проверка требует ключей в /etc/octopus/browser-aios-adapter.env + ALLOW_EXTERNAL_VISION=1 (ставит пользователь); OCR отложен.
+- 🚀 **Что дальше:** Фаза 5 — Agent hardening; Фаза 6 — AIOS интеграция; Фаза 7 — Production Gate.
+
+---
+
+### 📜 2026-09-08 — Фаза 2
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Фаза 2 — ProxyProvider + mock + vault-credentials + health-rotation (по решению 1)
