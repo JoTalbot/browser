@@ -33,7 +33,7 @@
 
 | # | Вопрос | Решение | Следствие |
 |---|---|---|---|
-| 8 | 🔗 Куда слать события Browser → AIOS | 📥 Pull-лента + опциональный push (у octopus-aios-bridge v1.1.0 нет events-ingress: только ask/debate/execute/tasks/status) | Фаза 6: durable GET /aios/events (cursor, envelope v1) + POST в AIOS_EVENTS_WEBHOOK_URL (HMAC/idempotency/outbox); AIOS забирает pull-ом или оператор задаёт webhook |
+| 8 | 🔗 Куда слать события Browser → AIOS | 📥 Pull-лента + опциональный push (у octopus-aios-bridge v1.1.0 нет events-ingress: только ask/debate/execute/tasks/status) | Фаза 6: durable GET /aios/events (cursor, envelope v1) + POST в AIOS_EVENTS_WEBHOOK_URL (HMAC/idempotency/outbox); AIOS забирает pull-ом или оператор задаёт webhook; started/finished для быстрых задач могут переупорядочиться в доставке — упорядочивать по ts |
 
 ---
 

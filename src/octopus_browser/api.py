@@ -477,6 +477,8 @@ def submit_agent_job(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
         raise HTTPException(429, str(exc), headers={"Retry-After": "5"}) from exc
     with _job_cancel_lock:
         _job_cancel[job.id] = cancel
+    # NOTE: started пушится из endpoint, finished — из job-потока; для быстрых задач
+    # finished может дойти раньше started — потребители упорядочивают события по ts.
     event_dispatcher.publish(AIOSEvent(type="agent.job.started", job_id=job.id, correlation_id=correlation_id.get(),
                                        data={"profile": data.profile, "task": data.task[:200],
                                              "require_lease": data.require_lease}))

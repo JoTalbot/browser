@@ -305,10 +305,15 @@ def test_api_webhook_e2e_push(aios_client, monkeypatch) -> None:
     job_id = submit.json()["id"]
     assert _wait_until(lambda: api_module._jobs.get(job_id).status == "done")
     assert _wait_until(lambda: len(seen) >= 2), f"webhook got {len(seen)} events"
-    kinds = [r.headers["X-Event-Type"] for r in seen]
-    assert kinds == ["agent.job.started", "agent.job.finished"]
+    # Порядок started/finished не гарантирован: быстрая задача финиширует раньше,
+    # чем endpoint успевает запушить started. Потребители упорядочивают по ts.
+    kinds = sorted(r.headers["X-Event-Type"] for r in seen)
+    assert kinds == ["agent.job.finished", "agent.job.started"]
     for request in seen:
         expected = hmac.new(b"s3cr3t", request.content, hashlib.sha256).hexdigest()
         assert request.headers["X-Signature"] == f"sha256={expected}"
-    finished = json.loads(seen[1].content)
+    bodies = [json.loads(r.content) for r in seen]
+    finished = next(b for b in bodies if b["type"] == "agent.job.finished")
+    started = next(b for b in bodies if b["type"] == "agent.job.started")
     assert finished["data"]["status"] == "done" and finished["data"]["final_url"] == "https://done.test"
+    assert started["ts"] <= finished["ts"]
