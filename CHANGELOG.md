@@ -16,6 +16,7 @@ All notable changes to Octopus Browser are documented here.
 - Adapter `POST /vision/analyze` endpoint backed by VisionRouter (gemini/groq/balancer + failover).
 - Vision control-plane API: `POST /vision/analyze`, `GET /vision/status`, `vision_*` metrics.
 - Adapter vision: failover-леги логируются (`vision leg ... failed`, без секретов) для диагностики.
+- Adapter vision: HTTP-ошибки провайдеров включают усечённый ответ гейтвея (первые 200 символов) для диагностики 4xx.
 
 ### Fixed
 - Deploy restarts were silently skipped: `systemctl list-unit-files | grep -q` under `set -o pipefail` dies from SIGPIPE (exit 141), so the service never restarted and production ran Sep-3 code. Restart detection now uses `systemctl cat`, apply state is tracked in `.applied_commit`, concurrent runs are serialized with `flock`.
