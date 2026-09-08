@@ -49,3 +49,7 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# 🛠️ Deploy runtime state (server-side only)
+.applied_commit
+.update.lock

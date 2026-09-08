@@ -1,0 +1,8 @@
+fastapi<1,>=0.115
+httpx<1,>=0.27
+playwright<2,>=1.45
+pydantic<3,>=2.7
+uvicorn[standard]<1,>=0.30
+
+[dev]
+pytest<9,>=8

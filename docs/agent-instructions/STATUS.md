@@ -5,7 +5,24 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, Фаза 0)
+## 🟢 Последняя запись (2026-09-08, Фаза 1)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Фаза 1 — адаптер AIOS в монорепо + skills/deploy-verify
+- ✅ **Сделано:**
+  - 📦 Импортирован /opt/octopus-browser-aios-adapter в integrations/browser-aios-adapter/ (ветка feat/phase1-adapter-monorepo).
+  - ⚙️ Добавлен CI-job adapter; quality-job ставит оба пакета.
+  - 🚀 deploy/server-update.sh ставит systemd-unit адаптера из Git и рестартит сервис.
+  - 🔧 Починен рестарт деплоя: grep -q под pipefail умирал по SIGPIPE (exit 141) и рестарт не выполнялся никогда — прод висел на коде от 03.09; теперь предикат через systemctl cat, применение через .applied_commit, защита от гонок через flock; quality-гейты deploy/release тоже ставят пакет адаптера.
+  - 🧬 Создан skills/deploy-verify (SKILL.md + verify_deploy.py + тесты).
+  - 📝 CHANGELOG: секция [Unreleased].
+- 🔍 **Как проверить:** PR → Actions зелёный; после merge — systemctl status octopus-browser-aios-adapter и /health адаптера.
+- ⚠️ **Замечания:** старый каталог /opt/octopus-browser-aios-adapter переместим в .bak только после проверки нового юнита.
+- 🚀 **Что дальше:** Фаза 2 — ProxyProvider + mock (по решению 1).
+
+---
+
+### 📜 2026-09-08 — Фаза 0
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Фаза 0 — фиксация продуктовых решений в docs/DECISIONS.md

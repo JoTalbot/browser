@@ -1,0 +1,2 @@
+[console_scripts]
+octopus-browser-aios-adapter = octopus_browser_adapter.main:main
