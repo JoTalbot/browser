@@ -17,6 +17,16 @@ from octopus_browser.profiles import ProfileManager
 from octopus_browser.rate_limit import RateLimiter
 from octopus_browser.security import require_api_key, validate_external_url
 from octopus_browser.sessions import SessionManager
+from octopus_browser.vision import (
+    MIME_TYPES,
+    VISION_MODES,
+    VisionBudgetExceeded,
+    VisionEngine,
+    VisionFrame,
+    VisionProviderError,
+    compose_context,
+    render_prompt,
+)
 
 app = FastAPI(title="🐙 Octopus Browser API", version="0.3.2")
 config = AppConfig()
@@ -24,6 +34,7 @@ config.ensure_dirs()
 profiles = ProfileManager(config)
 sessions = SessionManager(config)
 proxies = ProxyManager(config)
+vision_engine = VisionEngine(config)
 _audit = AuditSink(config.logs_dir / "audit.jsonl")
 _browser_slots = threading.BoundedSemaphore(max(1, config.max_concurrency))
 _rate_limiter = RateLimiter(config.rate_limit_per_minute)
@@ -61,6 +72,17 @@ class ProxyCredentialsIn(BaseModel):
     ref: str = Field(min_length=1, max_length=64)
     username: str = Field(min_length=1, max_length=256)
     password: str = Field(min_length=1, max_length=512)
+
+
+class VisionAnalyzeIn(BaseModel):
+    image_b64: str = Field(min_length=1, max_length=12_000_000)
+    mime_type: str = "image/png"
+    prompt: str = Field(default="", max_length=4000)
+    goal: str = Field(default="", max_length=2000)
+    mode: str = "describe"
+    target: str = Field(default="", max_length=500)
+    dom: str = Field(default="", max_length=20000)
+    a11y: str = Field(default="", max_length=20000)
 
 
 class NavigateIn(BaseModel):
@@ -186,12 +208,14 @@ def metrics(_: None = Depends(protected)) -> dict:
         "proxies_enabled": proxy_stats["enabled"],
         "proxies_cooldown": proxy_stats["in_cooldown"],
         "proxy_rotations_total": proxy_stats["rotations_total"],
+        "vision_calls_total": vision_engine.stats()["calls_total"],
+        "vision_blocked_budget": vision_engine.stats()["blocked_budget"],
     }
 
 
 @app.get("/octopus/info")
 def octopus_info(_: None = Depends(protected)) -> dict:
-    return {"adapter": "octopus-browser", "version": app.version, "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "agent-jobs", "readiness", "metrics", "session-revocation", "audit", "proxies"], "octopus": {"runtime": "AIOS", "module": "browser-adapter"}}
+    return {"adapter": "octopus-browser", "version": app.version, "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "agent-jobs", "readiness", "metrics", "session-revocation", "audit", "proxies", "vision-analyze"], "octopus": {"runtime": "AIOS", "module": "browser-adapter"}}
 
 
 @app.get("/profiles")
@@ -297,6 +321,50 @@ def store_proxy_credentials(data: ProxyCredentialsIn, _: None = Depends(protecte
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
     return {"stored": data.ref}
+
+
+@app.post("/vision/analyze")
+def vision_analyze(data: VisionAnalyzeIn, _: None = Depends(protected)) -> dict:
+    if data.mode not in VISION_MODES:
+        raise HTTPException(422, f"mode должен быть одним из: {sorted(VISION_MODES)}")
+    if data.mime_type not in MIME_TYPES:
+        raise HTTPException(422, "mime_type: только image/png, image/jpeg, image/webp")
+    frame = VisionFrame(image_b64=data.image_b64, mime_type=data.mime_type, dom=data.dom, a11y=data.a11y)
+    try:
+        frame.image_bytes()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        if data.mode == "describe":
+            if data.prompt:
+                result = vision_engine.ask(frame, data.prompt)
+                return {"mode": "describe", "text": result.text, "provider": result.provider,
+                        "model": result.model, "latency_ms": result.latency_ms, "degraded": False}
+            version, prompt = render_prompt("describe", context=compose_context(frame))
+            result = vision_engine.ask(frame, prompt)
+            return {"mode": "describe", "text": result.text, "provider": result.provider,
+                    "model": result.model, "prompt_version": version,
+                    "latency_ms": result.latency_ms, "degraded": False}
+        if data.mode == "ground":
+            if not data.target:
+                raise HTTPException(422, "Для mode=ground нужен target")
+            grounding, degraded = vision_engine.ground(frame, data.target)
+            return {"mode": "ground", "x": grounding.x, "y": grounding.y, "selector": grounding.selector,
+                    "confidence": grounding.confidence, "degraded": degraded}
+        decision, degraded = vision_engine.decide_frame(frame, data.goal or "?", [])
+        return {"mode": "decide", "action": decision.action, "target": decision.target, "text": decision.text,
+                "reason": decision.reason, "confidence": decision.confidence, "degraded": degraded}
+    except VisionBudgetExceeded as exc:
+        raise HTTPException(429, str(exc)) from exc
+    except VisionProviderError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@app.get("/vision/status")
+def vision_status(_: None = Depends(protected)) -> dict:
+    stats = vision_engine.stats()
+    return {"adapter_url": config.adapter_url, "vision_provider": config.vision_provider,
+            "max_image_bytes": config.vision_max_image_bytes, **stats}
 
 
 @app.post("/cookies/import")

@@ -24,5 +24,6 @@ src/octopus_browser.egg-info/requires.txt
 src/octopus_browser.egg-info/top_level.txt
 src/octopus_browser/core/__init__.py
 src/octopus_browser/core/launcher.py
+tests/test_browser_vision.py
 tests/test_proxy.py
 tests/test_smoke.py

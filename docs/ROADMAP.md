@@ -47,13 +47,13 @@
 ## Phase 4 — Vision & Web Intelligence
 - [x] Structured vision decision parsing and confidence field.
 - [x] Provider timeout/latency instrumentation foundation.
-- [ ] DOM + accessibility tree + screenshot fusion.
-- [ ] Stable element grounding/selectors.
-- [ ] OCR fallback.
-- [ ] Page understanding cache.
-- [ ] Confidence calibration and model/provider failover.
-- [ ] Prompt/version registry.
-- [ ] Cost/latency budgets.
+- [x] DOM + accessibility tree + screenshot fusion.
+- [x] Stable element grounding/selectors.
+- [ ] OCR fallback. ⏸️ deferred (DECISIONS.md #7: no local installs).
+- [x] Page understanding cache.
+- [x] Confidence calibration and model/provider failover.
+- [x] Prompt/version registry.
+- [x] Cost/latency budgets.
 
 ## Phase 5 — Data Plane
 - [x] Versioned session import/export schema.

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from .adapter import AIOSBrowserAdapter
 from .browser import BrowserAdapterError
+from .vision import VisionError
 
 
 class ObserveRequest(BaseModel):
@@ -23,6 +24,12 @@ class ActionRequest(BaseModel):
     url: str | None = None
     selector: str | None = None
     text: str | None = None
+
+
+class VisionAnalyzeRequest(BaseModel):
+    image_b64: str = Field(min_length=1, max_length=12_000_000)
+    mime_type: str = "image/png"
+    prompt: str = Field(default="Опиши интерфейс кратко.", max_length=4000)
 
 
 def create_app(adapter: AIOSBrowserAdapter | None = None) -> FastAPI:
@@ -69,6 +76,15 @@ def create_app(adapter: AIOSBrowserAdapter | None = None) -> FastAPI:
             )
         except (BrowserAdapterError, KeyError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/vision/analyze")
+    def vision_analyze(request: VisionAnalyzeRequest) -> dict[str, Any]:
+        try:
+            return runtime.analyze_image(request.image_b64, request.mime_type, request.prompt)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except VisionError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return app
 
