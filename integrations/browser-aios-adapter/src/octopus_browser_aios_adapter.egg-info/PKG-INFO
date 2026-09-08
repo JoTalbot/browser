@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: octopus-browser-aios-adapter
+Version: 0.1.0
+Summary: Безопасный CDP-адаптер браузерных профилей для Octopus/AIOS с vision routing
+Requires-Python: >=3.10
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: httpx<1,>=0.27
+Requires-Dist: playwright<2,>=1.45
+Requires-Dist: pydantic<3,>=2.7
+Requires-Dist: uvicorn[standard]<1,>=0.30
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8; extra == "dev"

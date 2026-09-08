@@ -1,0 +1,20 @@
+[Unit]
+Description=Octopus Browser AIOS CDP Adapter
+After=network-online.target docker.service octopus-aios.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/octopus-browser/integrations/browser-aios-adapter
+Environment=PYTHONPATH=/opt/octopus-browser/integrations/browser-aios-adapter/src
+EnvironmentFile=-/etc/octopus/secrets.env
+EnvironmentFile=/etc/octopus/browser-aios-adapter.env
+ExecStart=/opt/octopus-browser/.venv/bin/python -m octopus_browser_adapter.main
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,18 @@
 
 All notable changes to Octopus Browser are documented here.
 
+## [Unreleased]
+
+### Added
+- Import AIOS CDP adapter into the monorepo (`integrations/browser-aios-adapter/`); it previously lived only in unmanaged `/opt/octopus-browser-aios-adapter`.
+- CI job `adapter` (ruff + pytest for the adapter package); quality job installs both packages.
+- Deploy installs the adapter systemd unit from Git and restarts the service on update.
+- New `skills/deploy-verify` skill: post-deploy `/health` + `/ready` verification.
+
+### Fixed
+- Deploy restarts were silently skipped: `systemctl list-unit-files | grep -q` under `set -o pipefail` dies from SIGPIPE (exit 141), so the service never restarted and production ran Sep-3 code. Restart detection now uses `systemctl cat`, apply state is tracked in `.applied_commit`, concurrent runs are serialized with `flock`.
+- Deploy/release quality gates install the adapter package so root `pytest -q` collects its tests.
+
 ## [0.3.2] - 2026-09-05
 
 ### Release engineering
