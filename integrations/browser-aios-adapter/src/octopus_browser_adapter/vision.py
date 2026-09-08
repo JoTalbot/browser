@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from typing import Any
 import httpx
 
 from .config import AdapterSettings
+
+log = logging.getLogger("octopus.adapter.vision")
 
 
 class VisionError(RuntimeError):
@@ -123,6 +126,7 @@ class VisionRouter:
                 VisionError,
             ) as exc:
                 errors.append(f"{provider}:{type(exc).__name__}")
+                log.warning("vision leg '%s' failed (%s): %.160s", provider, type(exc).__name__, exc)
         raise VisionError(
             "все vision-провайдеры завершились ошибкой: " + ", ".join(errors)
         )
