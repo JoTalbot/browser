@@ -9,6 +9,9 @@ All notable changes to Octopus Browser are documented here.
 - CI job `adapter` (ruff + pytest for the adapter package); quality job installs both packages.
 - Deploy installs the adapter systemd unit from Git and restarts the service on update.
 - New `skills/deploy-verify` skill: post-deploy `/health` + `/ready` verification.
+- Proxy provider abstraction: `StaticListProvider` (seeds from `PROXY_LIST`) and scripted `MockProxyProvider` (no network; live vendors deferred per DECISIONS.md).
+- Vault-backed proxy credentials (`secret_ref` + encrypted store) and health-aware rotation (scoring, exponential cooldown, persisted pool).
+- Proxy control-plane API: `GET/POST/DELETE /proxies`, `GET /proxies/health`, `POST /proxies/rotate`, `POST /proxies/credentials`, plus `proxies_*` metrics.
 
 ### Fixed
 - Deploy restarts were silently skipped: `systemctl list-unit-files | grep -q` under `set -o pipefail` dies from SIGPIPE (exit 141), so the service never restarted and production ran Sep-3 code. Restart detection now uses `systemctl cat`, apply state is tracked in `.applied_commit`, concurrent runs are serialized with `flock`.

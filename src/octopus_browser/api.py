@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from octopus_browser.config import AppConfig
 from octopus_browser.jobs import Job, JobManager
+from octopus_browser.network import ProxyManager
 from octopus_browser.observability import AuditSink, correlation_id, request_context
 from octopus_browser.profiles import ProfileManager
 from octopus_browser.rate_limit import RateLimiter
@@ -22,6 +23,7 @@ config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
 sessions = SessionManager(config)
+proxies = ProxyManager(config)
 _audit = AuditSink(config.logs_dir / "audit.jsonl")
 _browser_slots = threading.BoundedSemaphore(max(1, config.max_concurrency))
 _rate_limiter = RateLimiter(config.rate_limit_per_minute)
@@ -47,6 +49,18 @@ class SessionIn(BaseModel):
 
 class SessionOut(BaseModel):
     id: str
+
+
+class ProxyIn(BaseModel):
+    server: str = Field(min_length=1, max_length=512)
+    label: str = Field(default="", max_length=128)
+    secret_ref: str = Field(default="", max_length=64)
+
+
+class ProxyCredentialsIn(BaseModel):
+    ref: str = Field(min_length=1, max_length=64)
+    username: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=512)
 
 
 class NavigateIn(BaseModel):
@@ -159,6 +173,7 @@ def readiness() -> dict:
 @app.get("/metrics")
 def metrics(_: None = Depends(protected)) -> dict:
     jobs = _jobs.list()
+    proxy_stats = proxies.stats()
     return {
         "requests_total": _request_count,
         "browser_concurrency_limit": config.max_concurrency,
@@ -167,12 +182,16 @@ def metrics(_: None = Depends(protected)) -> dict:
         "jobs_total": len(jobs),
         "jobs_active": sum(j.status in {"queued", "running"} for j in jobs),
         "jobs_failed": sum(j.status == "error" for j in jobs),
+        "proxies_total": proxy_stats["total"],
+        "proxies_enabled": proxy_stats["enabled"],
+        "proxies_cooldown": proxy_stats["in_cooldown"],
+        "proxy_rotations_total": proxy_stats["rotations_total"],
     }
 
 
 @app.get("/octopus/info")
 def octopus_info(_: None = Depends(protected)) -> dict:
-    return {"adapter": "octopus-browser", "version": app.version, "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "agent-jobs", "readiness", "metrics", "session-revocation", "audit"], "octopus": {"runtime": "AIOS", "module": "browser-adapter"}}
+    return {"adapter": "octopus-browser", "version": app.version, "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "agent-jobs", "readiness", "metrics", "session-revocation", "audit", "proxies"], "octopus": {"runtime": "AIOS", "module": "browser-adapter"}}
 
 
 @app.get("/profiles")
@@ -228,6 +247,56 @@ def revoke_session(session_id: str, _: None = Depends(protected)) -> dict:
     if not revoked:
         raise HTTPException(404, f"Сессия '{session_id}' не найдена")
     return {"revoked": session_id}
+
+
+@app.get("/proxies")
+def list_proxies(_: None = Depends(protected)) -> list[dict]:
+    return proxies.list()
+
+
+@app.post("/proxies", status_code=201)
+def add_proxy(data: ProxyIn, response: Response, _: None = Depends(protected)) -> dict:
+    try:
+        created = proxies.add(data.server, data.label or None, data.secret_ref or None)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    response.status_code = 201 if created else 200
+    stored = next((item for item in proxies.list() if item["server"] == data.server), {})
+    return {
+        "server": ProxyManager.redact_server(data.server),
+        "label": stored.get("label", ""),
+        "secret_ref": stored.get("secret_ref", ""),
+        "created": created,
+    }
+
+
+@app.delete("/proxies")
+def delete_proxy(server: str, _: None = Depends(protected)) -> dict:
+    if not proxies.remove(server):
+        raise HTTPException(404, "Прокси не найден")
+    return {"deleted": ProxyManager.redact_server(server)}
+
+
+@app.get("/proxies/health")
+def proxies_health(_: None = Depends(protected)) -> dict:
+    return proxies.refresh_health()
+
+
+@app.post("/proxies/rotate")
+def rotate_proxy(_: None = Depends(protected)) -> dict:
+    server = proxies.rotate()
+    return {"server": ProxyManager.redact_server(server) if server else None}
+
+
+@app.post("/proxies/credentials", status_code=201)
+def store_proxy_credentials(data: ProxyCredentialsIn, _: None = Depends(protected)) -> dict:
+    try:
+        proxies.credentials.set(data.ref, data.username, data.password)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {"stored": data.ref}
 
 
 @app.post("/cookies/import")
