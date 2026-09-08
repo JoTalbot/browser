@@ -76,6 +76,10 @@ class ProfileManager:
         self._meta_path(name).write_text(json.dumps(meta, ensure_ascii=False, indent=2))
         return meta
 
+    def exists(self, name: str) -> bool:
+        profile_dir = self._safe_dir(self.validate_name(name))
+        return profile_dir.exists() and not profile_dir.is_symlink() and self._meta_path(name).exists()
+
     def get(self, name: str) -> Path:
         name = self.validate_name(name)
         profile_dir = self._profile_dir(name)

@@ -9,8 +9,16 @@ from urllib.parse import urlparse
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
+from octopus_browser.aios import (
+    AIOSBridge,
+    AIOSError,
+    AIOSEvent,
+    EventDispatcher,
+    EventLog,
+)
 from octopus_browser.config import AppConfig
 from octopus_browser.jobs import Job, JobManager
+from octopus_browser.leases import LeaseConflict, ProfileLeaseManager
 from octopus_browser.network import ProxyManager
 from octopus_browser.observability import AuditSink, correlation_id, request_context
 from octopus_browser.profiles import ProfileManager
@@ -38,7 +46,11 @@ vision_engine = VisionEngine(config)
 _audit = AuditSink(config.logs_dir / "audit.jsonl")
 _browser_slots = threading.BoundedSemaphore(max(1, config.max_concurrency))
 _rate_limiter = RateLimiter(config.rate_limit_per_minute)
-_jobs = JobManager(workers=max(1, config.max_concurrency), max_queued=max(1, config.max_concurrency * 8))
+_jobs = JobManager(workers=max(1, config.max_concurrency), max_queued=max(1, config.max_concurrency * 8), persist_path=config.data_dir / "agent_jobs.json")
+event_log = EventLog(config.data_dir / "aios_events.jsonl", config.aios_events_max_lines)
+event_dispatcher = EventDispatcher(event_log, config.aios_events_webhook_url, config.aios_events_webhook_secret, config.data_dir / "aios_push_pending.json")
+leases = ProfileLeaseManager(config.data_dir / "profile_leases.json")
+aios_bridge = AIOSBridge(config.aios_bridge_url)
 _request_count = 0
 _request_lock = threading.Lock()
 
@@ -85,6 +97,11 @@ class VisionAnalyzeIn(BaseModel):
     a11y: str = Field(default="", max_length=20000)
 
 
+class LeaseIn(BaseModel):
+    holder: str = Field(min_length=1, max_length=128)
+    ttl_seconds: int = Field(default=300, ge=1, le=86400)
+
+
 class NavigateIn(BaseModel):
     url: str
     profile: str = "main"
@@ -108,6 +125,8 @@ class AgentTaskIn(BaseModel):
     profile: str = "main"
     max_steps: int | None = Field(default=None, ge=1, le=100)
     deadline_seconds: float | None = Field(default=None, ge=0, le=86400)
+    require_lease: bool = False
+    lease_ttl_seconds: int | None = Field(default=None, ge=1, le=86400)
 
     @field_validator("profile")
     @classmethod
@@ -215,12 +234,15 @@ def metrics(_: None = Depends(protected)) -> dict:
         "agent_steps_total": _agent_stats["steps_total"],
         "agent_runs_done": _agent_stats["runs_done"],
         "agent_runs_verified": _agent_stats["runs_verified"],
+        "jobs_queued": sum(j.status == "queued" for j in jobs),
+        "profile_leases_held": leases.held_count(),
+        "aios_events_pending_push": event_dispatcher.pending_count(),
     }
 
 
 @app.get("/octopus/info")
 def octopus_info(_: None = Depends(protected)) -> dict:
-    return {"adapter": "octopus-browser", "version": app.version, "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "agent-jobs", "readiness", "metrics", "session-revocation", "audit", "proxies", "vision-analyze"], "octopus": {"runtime": "AIOS", "module": "browser-adapter"}}
+    return {"adapter": "octopus-browser", "version": app.version, "capabilities": ["profiles", "sessions", "navigation", "vision", "agent", "agent-jobs", "readiness", "metrics", "session-revocation", "audit", "proxies", "vision-analyze", "aios-events", "profile-leases", "durable-jobs"], "octopus": {"runtime": "AIOS", "module": "browser-adapter"}}
 
 
 @app.get("/profiles")
@@ -398,21 +420,50 @@ _job_cancel_lock = threading.Lock()
 _job_cancel: dict[str, threading.Event] = {}
 
 
-def _agent_job(data: AgentTaskIn, cancel: threading.Event) -> dict:
+def _agent_job(data: AgentTaskIn, cancel: threading.Event, correlation: str = "") -> dict:
     from octopus_browser.agent import OctopusAgent
     from octopus_browser.core.launcher import BrowserController
 
     controller = BrowserController(config, profile_dir=profiles.get(data.profile))
+    lease_id: str | None = None
     try:
+        if data.require_lease:
+            ttl = data.lease_ttl_seconds or config.agent_lease_ttl_seconds
+            try:
+                lease = leases.acquire(data.profile, holder="agent-job", ttl_seconds=ttl)
+            except LeaseConflict as exc:
+                busy = f"Профиль занят: {exc.current.get('holder')}"
+                event_dispatcher.publish(AIOSEvent(type="agent.job.failed", correlation_id=correlation,
+                                                   data={"profile": data.profile, "task": data.task[:200],
+                                                         "error": busy, "lease_id": ""}))
+                raise RuntimeError(busy) from exc
+            lease_id = lease["lease_id"]
+            event_dispatcher.publish(AIOSEvent(type="profile.leased", correlation_id=correlation,
+                                               data={"profile": data.profile, "lease_id": lease_id, "holder": "agent-job"}))
         agent = OctopusAgent(config, controller)
-        result = agent.run(data.task, max_steps=data.max_steps, cancel=cancel, deadline_seconds=data.deadline_seconds)
+        try:
+            result = agent.run(data.task, max_steps=data.max_steps, cancel=cancel, deadline_seconds=data.deadline_seconds)
+        except Exception as exc:
+            event_dispatcher.publish(AIOSEvent(type="agent.job.failed", correlation_id=correlation,
+                                               data={"profile": data.profile, "task": data.task[:200],
+                                                     "error": str(exc)[:300], "lease_id": lease_id or ""}))
+            raise
+        event_dispatcher.publish(AIOSEvent(type="agent.job.finished", correlation_id=correlation,
+                                           data={"profile": data.profile, "task": data.task[:200], "status": result.status,
+                                                 "steps": result.steps, "retries": result.retries,
+                                                 "recoveries": result.recoveries, "verified": result.verified,
+                                                 "final_url": result.final_url, "lease_id": lease_id or ""}))
         with _agent_stats_lock:
             _agent_stats["runs_total"] += 1
             _agent_stats["steps_total"] += result.steps
             _agent_stats["runs_done"] += 1 if result.status == "done" else 0
             _agent_stats["runs_verified"] += 1 if result.verified else 0
-        return {"status": result.status, "steps": result.steps, "retries": result.retries, "recoveries": result.recoveries, "verified": result.verified, "final_url": result.final_url, "log": result.log, "state": result.state.value, "request_id": correlation_id.get()}
+        return {"status": result.status, "steps": result.steps, "retries": result.retries, "recoveries": result.recoveries, "verified": result.verified, "lease": lease_id, "final_url": result.final_url, "log": result.log, "state": result.state.value, "request_id": correlation_id.get()}
     finally:
+        if lease_id is not None:
+            leases.release(lease_id)
+            event_dispatcher.publish(AIOSEvent(type="profile.released", correlation_id=correlation,
+                                               data={"profile": data.profile, "lease_id": lease_id}))
         controller.stop()
 
 
@@ -420,11 +471,15 @@ def _agent_job(data: AgentTaskIn, cancel: threading.Event) -> dict:
 def submit_agent_job(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
     try:
         cancel = threading.Event()
-        job = _jobs.submit(lambda: _with_browser_slot(lambda: _agent_job(data, cancel)))
+        cid = correlation_id.get()
+        job = _jobs.submit(lambda: _with_browser_slot(lambda: _agent_job(data, cancel, cid)))
     except RuntimeError as exc:
-        raise HTTPException(429, str(exc)) from exc
+        raise HTTPException(429, str(exc), headers={"Retry-After": "5"}) from exc
     with _job_cancel_lock:
         _job_cancel[job.id] = cancel
+    event_dispatcher.publish(AIOSEvent(type="agent.job.started", job_id=job.id, correlation_id=correlation_id.get(),
+                                       data={"profile": data.profile, "task": data.task[:200],
+                                             "require_lease": data.require_lease}))
     return _job_view(job)
 
 
@@ -458,6 +513,80 @@ def cancel_agent_job(job_id: str, _: None = Depends(protected)) -> dict:
     with _job_cancel_lock:
         _job_cancel.pop(job_id, None)
     raise HTTPException(409, "Задача уже выполняется или завершена; принудительное убийство процесса не выполняется")
+
+
+@app.post("/profiles/{name}/lease", status_code=201)
+def acquire_profile_lease(name: str, data: LeaseIn, _: None = Depends(protected)) -> dict:
+    try:
+        if not profiles.exists(name):
+            raise HTTPException(404, f"Профиль '{name}' не найден")
+        lease = leases.acquire(name, data.holder, data.ttl_seconds)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except LeaseConflict as exc:
+        raise HTTPException(409, {"message": f"Профиль '{name}' занят", "lease": exc.current}) from exc
+    event_dispatcher.publish(AIOSEvent(type="profile.leased", correlation_id=correlation_id.get(), data=dict(lease)))
+    return lease
+
+
+@app.get("/profiles/{name}/lease")
+def get_profile_lease(name: str, _: None = Depends(protected)) -> dict:
+    try:
+        if not profiles.exists(name):
+            raise HTTPException(404, f"Профиль '{name}' не найден")
+        lease = leases.status(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if lease is None:
+        raise HTTPException(404, f"У профиля '{name}' нет активной аренды")
+    return lease
+
+
+@app.delete("/profiles/{name}/lease")
+def release_profile_lease(name: str, lease_id: str, _: None = Depends(protected)) -> dict:
+    try:
+        if not profiles.exists(name):
+            raise HTTPException(404, f"Профиль '{name}' не найден")
+        current = leases.status(name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if current is None:
+        raise HTTPException(404, f"У профиля '{name}' нет активной аренды")
+    if current["lease_id"] != lease_id:
+        raise HTTPException(409, "lease_id не совпадает с активной арендой")
+    leases.release(lease_id)
+    event_dispatcher.publish(AIOSEvent(type="profile.released", correlation_id=correlation_id.get(),
+                                       data={"profile": name, "lease_id": lease_id}))
+    return {"released": lease_id}
+
+
+@app.get("/aios/events")
+def list_aios_events(since: str | None = None, limit: int = 100, _: None = Depends(protected)) -> dict:
+    events, last_id = event_log.read(since=since, limit=limit)
+    return {"events": events, "last_id": last_id, "pending_push": event_dispatcher.pending_count()}
+
+
+@app.post("/aios/events/flush")
+def flush_aios_events(_: None = Depends(protected)) -> dict:
+    return event_dispatcher.flush()
+
+
+@app.get("/aios/status")
+def aios_status(_: None = Depends(protected)) -> dict:
+    try:
+        bridge = aios_bridge.status()
+        reachable = True
+    except AIOSError as exc:
+        bridge = {"error": str(exc)}
+        reachable = False
+    return {
+        "bridge_url": config.aios_bridge_url,
+        "reachable": reachable,
+        "bridge": bridge,
+        "webhook_configured": bool(config.aios_events_webhook_url),
+        "pending_push": event_dispatcher.pending_count(),
+        "events_total": event_log.count(),
+    }
 
 
 @app.post("/navigate")

@@ -5,7 +5,24 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, Фаза 5)
+## 🟢 Последняя запись (2026-09-08, Фаза 6)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Фаза 6 — AIOS интеграция (события, координация, durable-очередь)
+- ✅ **Сделано:**
+  - 🔍 Разведка: octopus-aios-bridge v1.1.0 жив (:9600, kernel running); events-ingress нет → решение 8 (pull + опциональный push).
+  - 🔗 aios.py: AIOSEvent (envelope v1) + EventLog (JSONL, cursor, prune) + EventDispatcher (HMAC/idempotency/pending/outbox/flush) + AIOSBridge probe.
+  - 🔒 leases.py: ProfileLeaseManager (TTL, персистентность, refresh); API лизов 201/409/404; opt-in require_lease в agent jobs.
+  - 📦 JobManager: JSON-персистентность + восстановление после рестарта; jobs_queued; Retry-After на 429.
+  - 🔌 API: /aios/events, /aios/events/flush, /aios/status; события started/finished/failed/leased/released; capabilities +3.
+  - 🧪 tests/test_aios.py: лог/пуш/лизы/durable/backpressure/E2E webhook с проверкой HMAC.
+- 🔍 **Как проверить:** PR → Actions зелёный; после merge — GET /aios/status (нужен OCTOPUS_API_KEY), живой бридж отвечает.
+- ⚠️ **Замечания:** push идёт только если задан AIOS_EVENTS_WEBHOOK_URL; live E2E задач ждёт OCTOPUS_API_KEY.
+- 🚀 **Что дальше:** Фаза 7 — Production Gate.
+
+---
+
+### 📜 2026-09-08 — Фаза 5 (была последней)
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Фаза 5 — Agent runtime hardening (pre/postconditions, retries, recovery, cancel, deadlines, verification)
