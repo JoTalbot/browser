@@ -20,6 +20,10 @@ All notable changes to Octopus Browser are documented here.
 - Agent hardening: bounded retries + recoveries, cooperative cancellation, deadlines, pre/postconditions, goal verification (verify_fn + done-confidence gate), AgentPlanner abstraction, structured ActionValidationError.
 - Agent jobs API: cooperative cancel of running jobs, per-task deadline_seconds, retries/recoveries/verified in results, agent_* metrics.
 - BrowserController.reload() for stale-page recovery; load scenario: 100 scripted tasks with mixed outcomes.
+- AIOS events: durable JSONL feed (GET /aios/events, cursor), optional webhook push (HMAC + idempotency + pending outbox + flush), GET /aios/status bridge probe.
+- Profile leases: TTL coordination API (POST/GET/DELETE /profiles/{name}/lease), persisted, opt-in require_lease for agent jobs.
+- Durable jobs: JobManager JSON persistence + restart recovery (interrupted by restart), jobs_queued metric, Retry-After on 429.
+- Agent jobs: pre-submit started event with correct ts (fast jobs keep started.ts <= finished.ts); submit accepts explicit job_id.
 
 ### Fixed
 - Deploy restarts were silently skipped: `systemctl list-unit-files | grep -q` under `set -o pipefail` dies from SIGPIPE (exit 141), so the service never restarted and production ran Sep-3 code. Restart detection now uses `systemctl cat`, apply state is tracked in `.applied_commit`, concurrent runs are serialized with `flock`.

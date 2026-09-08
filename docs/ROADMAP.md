@@ -66,9 +66,9 @@
 - [x] Stable API foundation and capability discovery endpoint.
 - [x] Shared request/correlation ID foundation.
 - [x] Job submission/status/cancellation API foundation.
-- [ ] Webhook/event integration.
-- [ ] Multi-agent concurrency coordination.
-- [ ] Backpressure and durable queueing.
+- [x] Webhook/event integration.
+- [x] Multi-agent concurrency coordination.
+- [x] Backpressure and durable queueing.
 
 ## Phase 7 — Observability & Operations
 - [x] Structured JSON logging foundation.
