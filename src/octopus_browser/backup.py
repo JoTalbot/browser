@@ -59,22 +59,21 @@ def _pack(files: dict[str, bytes]) -> bytes:
 
 
 def _unpack(tar_blob: bytes) -> dict[str, bytes]:
+    files: dict[str, bytes] = {}
     try:
-        handle = tarfile.open(fileobj=io.BytesIO(tar_blob), mode="r:gz")
+        with tarfile.open(fileobj=io.BytesIO(tar_blob), mode="r:gz") as handle:
+            for member in handle.getmembers():
+                name = member.name
+                if not name or name.startswith("/") or ".." in name.split("/"):
+                    raise BackupError(f"Небезопасный путь в архиве: {name!r}")
+                if not member.isfile():
+                    continue
+                extracted = handle.extractfile(member)
+                if extracted is None:
+                    raise BackupError(f"Не читается {name!r} в архиве")
+                files[name] = extracted.read()
     except tarfile.TarError as exc:
         raise BackupError(f"Повреждённый tar: {exc}") from exc
-    files: dict[str, bytes] = {}
-    with handle:
-        for member in handle.getmembers():
-            name = member.name
-            if not name or name.startswith("/") or ".." in name.split("/"):
-                raise BackupError(f"Небезопасный путь в архиве: {name!r}")
-            if not member.isfile():
-                continue
-            extracted = handle.extractfile(member)
-            if extracted is None:
-                raise BackupError(f"Не читается {name!r} в архиве")
-            files[name] = extracted.read()
     return files
 
 
