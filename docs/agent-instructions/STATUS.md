@@ -5,7 +5,25 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, Фаза 7 — инструмент бэкапа)
+## 🟢 Последняя запись (2026-09-08, Фаза 7 — evidence)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Фаза 7 — Production Gate evidence: drills + вердикт гейта
+- ✅ **Сделано:**
+  - 💾 Бэкап: фикс пустых каталогов + тест; drill на прод-данных: backup/verify/restore, строгий diff MATCHES.
+  - 📦 Откат: v0.3.2 без бинарных ассетов → tag-as-artifact drill (install + jobs/vault/version OK); процедура revert-PR.
+  - 🔑 Ротация: сессии A→B (B читает, A отвергнут) + proxy creds old→new; runbook docs/BACKUP.md.
+  - 🔌 Mock-proxy live: health/cooldown/rotation/stats на прод-хосте (частичное evidence пункта 4).
+  - 💥 Хаос: sandbox kill -9 → state survived (лиз/задача/события); prod restart 08:48 → active + 200/200.
+  - 📊 Soak: suite 2× + load 3× зелёные; deploy runs evidence; health/ready 200 (0.4.0), protected 503 fail-closed.
+  - 📝 Гейт: checked 1/5/6/7/8; open 2 (нет ключа, partial), 3 (skip), 4 (mock, partial). v1.0.0 BLOCKED.
+- 🔍 **Как проверить:** PR → Actions зелёный; после merge — тег v0.4.0 → релиз-артефакт для будущих откатов.
+- ⚠️ **Замечания:** v1.0.0 ждёт OCTOPUS_API_KEY + решения по E2E-браузерам и live-proxy; v0.3.x без бинарных ассетов.
+- 🚀 **Что дальше:** merge → тег v0.4.0 → план закрыт кроме заблокированных пунктов; следующие шаги за пользователем.
+
+---
+
+### 📜 2026-09-08 — Фаза 7 инструмент бэкапа (был последним)
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Фаза 7 — Production Gate: инструмент шифрованного бэкапа + версия 0.4.0

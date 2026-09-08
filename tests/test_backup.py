@@ -93,6 +93,20 @@ def test_refuses_overwrite_and_nonempty(tmp_path) -> None:
     assert (busy / "keep.txt").read_text(encoding="utf-8") == "prod"
 
 
+def test_empty_dirs_preserved(tmp_path) -> None:
+    data = tmp_path / "data"
+    (data / "empty1" / "nested-empty").mkdir(parents=True)
+    (data / "lonely").mkdir()
+    (data / "f.txt").write_text("x", encoding="utf-8")
+    out = tmp_path / "d.obak"
+    assert create_backup(data, out, KEY_A)["dirs"] == 3
+    restored = tmp_path / "r"
+    restore_backup(out, restored, KEY_A)
+    assert (restored / "empty1" / "nested-empty").is_dir()
+    assert (restored / "lonely").is_dir()
+    assert (restored / "f.txt").read_text(encoding="utf-8") == "x"
+
+
 def test_empty_dir_and_missing_key(tmp_path) -> None:
     data = tmp_path / "data"
     data.mkdir()
