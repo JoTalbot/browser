@@ -4,6 +4,8 @@ All notable changes to Octopus Browser are documented here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-08
+
 ### Added
 - Import AIOS CDP adapter into the monorepo (`integrations/browser-aios-adapter/`); it previously lived only in unmanaged `/opt/octopus-browser-aios-adapter`.
 - CI job `adapter` (ruff + pytest for the adapter package); quality job installs both packages.
@@ -24,6 +26,7 @@ All notable changes to Octopus Browser are documented here.
 - Profile leases: TTL coordination API (POST/GET/DELETE /profiles/{name}/lease), persisted, opt-in require_lease for agent jobs.
 - Durable jobs: JobManager JSON persistence + restart recovery (interrupted by restart), jobs_queued metric, Retry-After on 429.
 - Agent jobs: pre-submit started event with correct ts (fast jobs keep started.ts <= finished.ts); submit accepts explicit job_id.
+- Encrypted backup/restore CLI (`scripts/backup.py` + `octopus_browser.backup`): AESGCM envelope, sha256 manifest, refuse-nonempty restore guard.
 
 ### Fixed
 - Deploy restarts were silently skipped: `systemctl list-unit-files | grep -q` under `set -o pipefail` dies from SIGPIPE (exit 141), so the service never restarted and production ran Sep-3 code. Restart detection now uses `systemctl cat`, apply state is tracked in `.applied_commit`, concurrent runs are serialized with `flock`.

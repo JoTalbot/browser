@@ -5,7 +5,21 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, Фаза 6)
+## 🟢 Последняя запись (2026-09-08, Фаза 7 — инструмент бэкапа)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Фаза 7 — Production Gate: инструмент шифрованного бэкапа + версия 0.4.0
+- ✅ **Сделано:**
+  - 💾 backup.py: AESGCM-конверт, sha256-манифест, verify без записи, restore только в пустой каталог; CLI backup/restore/verify/genkey.
+  - 🧪 tests/test_backup.py: round-trip, tamper/wrong-key, защита назначения, CLI-цикл через subprocess.
+  - 🔢 Версия 0.4.0: pyproject + api + CHANGELOG синхронны; решения пользователя по скоупу гейта (E2E пропустить, mock-live, рестарт прод ок, откат в песочнице).
+- 🔍 **Как проверить:** PR → Actions зелёный; после merge — drill бэкапа прод-данных в /tmp.
+- ⚠️ **Замечания:** evidence гейта — следующим PR после прогона drill-ей; пункты 2/3/4 частично заблокированы (нет OCTOPUS_API_KEY, нет браузеров, proxy=mock).
+- 🚀 **Что дальше:** merge → deploy → drills (backup/rollback/rotation/mock-proxy/chaos/restart/soak) → PR evidence → тег v0.4.0.
+
+---
+
+### 📜 2026-09-08 — Фаза 6 (была последней)
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Фаза 6 — AIOS интеграция (события, координация, durable-очередь)
