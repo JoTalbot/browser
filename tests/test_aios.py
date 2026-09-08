@@ -178,6 +178,17 @@ def test_jobs_backpressure() -> None:
         manager.shutdown()
 
 
+def test_jobs_submit_explicit_id_and_duplicate() -> None:
+    manager = JobManager(workers=1)
+    try:
+        job = manager.submit(lambda: 1, job_id="fixed-id")
+        assert job.id == "fixed-id" and manager.get("fixed-id") is job
+        with pytest.raises(RuntimeError, match="уже существует"):
+            manager.submit(lambda: 2, job_id="fixed-id")
+    finally:
+        manager.shutdown()
+
+
 @pytest.fixture()
 def aios_client(tmp_path, monkeypatch):
     monkeypatch.setattr(api_module, "event_log", EventLog(tmp_path / "ev.jsonl"))

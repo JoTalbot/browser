@@ -17,7 +17,7 @@ from octopus_browser.aios import (
     EventLog,
 )
 from octopus_browser.config import AppConfig
-from octopus_browser.jobs import Job, JobManager
+from octopus_browser.jobs import Job, JobManager, new_job_id
 from octopus_browser.leases import LeaseConflict, ProfileLeaseManager
 from octopus_browser.network import ProxyManager
 from octopus_browser.observability import AuditSink, correlation_id, request_context
@@ -472,16 +472,18 @@ def submit_agent_job(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
     try:
         cancel = threading.Event()
         cid = correlation_id.get()
-        job = _jobs.submit(lambda: _with_browser_slot(lambda: _agent_job(data, cancel, cid)))
+        job_id = new_job_id()
+        started_event = AIOSEvent(type="agent.job.started", job_id=job_id, correlation_id=cid,
+                                  data={"profile": data.profile, "task": data.task[:200],
+                                        "require_lease": data.require_lease})
+        job = _jobs.submit(lambda: _with_browser_slot(lambda: _agent_job(data, cancel, cid)), job_id=job_id)
     except RuntimeError as exc:
         raise HTTPException(429, str(exc), headers={"Retry-After": "5"}) from exc
     with _job_cancel_lock:
         _job_cancel[job.id] = cancel
-    # NOTE: started пушится из endpoint, finished — из job-потока; для быстрых задач
-    # finished может дойти раньше started — потребители упорядочивают события по ts.
-    event_dispatcher.publish(AIOSEvent(type="agent.job.started", job_id=job.id, correlation_id=correlation_id.get(),
-                                       data={"profile": data.profile, "task": data.task[:200],
-                                             "require_lease": data.require_lease}))
+    # NOTE: started создан ДО submit (корректный ts), но пушится после успеха;
+    # finished из job-потока может дойти раньше — потребители упорядочивают по ts.
+    event_dispatcher.publish(started_event)
     return _job_view(job)
 
 

@@ -17,6 +17,11 @@ log = logging.getLogger("octopus.jobs")
 TERMINAL_STATES = {"done", "error", "cancelled", "timeout"}
 
 
+def new_job_id() -> str:
+    """Сгенерировать id задачи (для pre-submit подготовки, напр. started-событий)."""
+    return uuid.uuid4().hex
+
+
 @dataclass
 class Job:
     id: str
@@ -49,12 +54,14 @@ class JobManager:
                 self._persist_path = None
         self._restore()
 
-    def submit(self, fn: Callable[[], Any]) -> Job:
+    def submit(self, fn: Callable[[], Any], job_id: str | None = None) -> Job:
         with self._lock:
             active = sum(job.status in {"queued", "running"} for job in self._jobs.values())
             if active >= self._max_queued:
                 raise RuntimeError("Очередь задач переполнена")
-            job = Job(id=uuid.uuid4().hex)
+            job = Job(id=job_id or uuid.uuid4().hex)
+            if job.id in self._jobs:
+                raise RuntimeError("Задача с таким id уже существует")
             self._jobs[job.id] = job
             self._futures[job.id] = self._executor.submit(self._run, job.id, fn)
             self._save_locked()
