@@ -5,7 +5,21 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, Фаза 4)
+## 🟢 Последняя запись (2026-09-08, микрофикс vision-логирования)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Диагностика live-vision — логирование упавших failover-ног VisionRouter
+- ✅ **Сделано:**
+  - 🔍 Live-проверка: `POST /vision/analyze` → 200 через gemini-fallback (latency ~1.2s); нога balancer падает молча.
+  - 📝 Адаптер `vision.py`: `log.warning` на каждую упавшую ногу (провайдер + тип ошибки + усечённое сообщение, без секретов).
+  - 📝 STATUS: исправлено имя теста `tests/test_vision.py` → `tests/test_browser_vision.py`.
+- 🔍 **Как проверить:** после merge — live `/vision/analyze` + `journalctl -u octopus-browser-aios-adapter | grep 'vision leg'`.
+- ⚠️ **Замечания:** ключи vision берутся из `/etc/octopus/secrets.env` (unit читает его первым); значения ключей не читались.
+- 🚀 **Что дальше:** по причине из журнала — чинить balancer-ветку или оставить gemini-fallback; затем Фаза 5.
+
+---
+
+### 📜 2026-09-08 — Фаза 4 (была последней)
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Фаза 4 revised — Vision через внешний API адаптера (без локальных моделей, решение 7)
@@ -13,7 +27,7 @@
   - 🔌 Адаптер: POST /vision/analyze поверх VisionRouter (gemini/groq/balancer + failover) + тесты 200/400/503.
   - 👁️ Браузер: VisionProvider (adapter/openai/mock), VisionFrame fusion, VisionGrounding, VisionBudget, VisionCache, реестр промптов.
   - 🔌 API: POST /vision/analyze (describe/decide/ground), GET /vision/status; метрики vision_*; capability vision-analyze.
-  - 🧪 tests/test_vision.py: провайдеры на MockTransport, failover, бюджет, кэш, граундинг, API (400/422/429).
+  - 🧪 tests/test_browser_vision.py: провайдеры на MockTransport, failover, бюджет, кэш, граундинг, API (400/422/429).
   - 📝 DECISIONS.md #7; ROADMAP Phase 4 почти закрыта (кроме OCR — deferred).
 - 🔍 **Как проверить:** PR → Actions зелёный; после merge + ключей — GET /vision/status, live /vision/analyze.
 - ⚠️ **Замечания:** live-проверка требует ключей в /etc/octopus/browser-aios-adapter.env + ALLOW_EXTERNAL_VISION=1 (ставит пользователь); OCR отложен.
