@@ -82,6 +82,10 @@ class BrowserController:
         self._require().goto(url, timeout=self.config.navigation_timeout_ms)
         self.pacer.pause()
 
+    def reload(self) -> None:
+        self._require().reload(timeout=self.config.navigation_timeout_ms)
+        self.pacer.pause()
+
     def screenshot(self, full_page: bool = False) -> str:
         raw = self._require().screenshot(full_page=full_page)
         return base64.b64encode(raw).decode()
