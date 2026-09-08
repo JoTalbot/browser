@@ -4,6 +4,7 @@ src/octopus_browser/__init__.py
 src/octopus_browser/agent.py
 src/octopus_browser/aios.py
 src/octopus_browser/api.py
+src/octopus_browser/backup.py
 src/octopus_browser/config.py
 src/octopus_browser/cookies.py
 src/octopus_browser/jobs.py
@@ -29,6 +30,7 @@ src/octopus_browser/core/launcher.py
 tests/test_agent_hardening.py
 tests/test_agent_load.py
 tests/test_aios.py
+tests/test_backup.py
 tests/test_browser_vision.py
 tests/test_proxy.py
 tests/test_smoke.py

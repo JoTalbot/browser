@@ -36,7 +36,7 @@ from octopus_browser.vision import (
     render_prompt,
 )
 
-app = FastAPI(title="🐙 Octopus Browser API", version="0.3.2")
+app = FastAPI(title="🐙 Octopus Browser API", version="0.4.0")
 config = AppConfig()
 config.ensure_dirs()
 profiles = ProfileManager(config)
