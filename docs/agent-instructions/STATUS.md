@@ -5,7 +5,23 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-08, микрофикс vision-логирования)
+## 🟢 Последняя запись (2026-09-08, Фаза 5)
+
+- 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** Фаза 5 — Agent runtime hardening (pre/postconditions, retries, recovery, cancel, deadlines, verification)
+- ✅ **Сделано:**
+  - 🤖 agent.py: AgentPlanner-абстракция, ActionValidationError со структурированными issues, bounded retries (backoff) + recoveries (reload/re-observe), stale-классификация.
+  - 🤖 Отмена (threading.Event, кооперативная), дедлайны (инжектируемый clock), верификация цели (verify_fn + confidence gate), состояния CANCELLED/TIMEOUT.
+  - 🔌 API: кооперативная отмена running-задач, deadline_seconds в AgentTaskIn, retries/recoveries/verified в результатах, метрики agent_*.
+  - 🧪 tests/test_agent_hardening.py (16 тестов) + tests/test_agent_load.py (100 задач: 90 done / 5 cancelled / 5 timeout).
+  - 📝 ROADMAP Phase 3 закрыта полностью; CHANGELOG/STATUS обновлены.
+- 🔍 **Как проверить:** PR → Actions зелёный; после merge — POST /agent/jobs + cancel running-задачи (нужен OCTOPUS_API_KEY).
+- ⚠️ **Замечания:** отмена кооперативная (проверки на границах шагов/ретраев); live E2E с реальным браузером — после ключа API.
+- 🚀 **Что дальше:** Фаза 6 — AIOS интеграция; Фаза 7 — Production Gate.
+
+---
+
+### 📜 2026-09-08 — микрофикс vision-логирования (был последним)
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
 - 🎯 **Шаг:** Диагностика live-vision — логирование упавших failover-ног VisionRouter

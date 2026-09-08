@@ -37,11 +37,11 @@
 - [x] Typed action model and validation foundation.
 - [x] Explicit observe → plan → validate → act → verify state machine.
 - [x] Bounded step budget with explicit `limit` state.
-- [ ] Preconditions/postconditions.
-- [ ] Bounded retries, cancellation and deadlines.
-- [ ] Goal completion verification.
-- [ ] Stale page/selector recovery.
-- [ ] Provider abstraction and structured model outputs.
+- [x] Preconditions/postconditions.
+- [x] Bounded retries, cancellation and deadlines.
+- [x] Goal completion verification.
+- [x] Stale page/selector recovery.
+- [x] Provider abstraction and structured model outputs.
 - [x] Asynchronous job submission/status/cancellation API.
 
 ## Phase 4 — Vision & Web Intelligence

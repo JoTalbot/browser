@@ -107,6 +107,7 @@ class AgentTaskIn(BaseModel):
     task: str = Field(min_length=1, max_length=4000)
     profile: str = "main"
     max_steps: int | None = Field(default=None, ge=1, le=100)
+    deadline_seconds: float | None = Field(default=None, ge=0, le=86400)
 
     @field_validator("profile")
     @classmethod
@@ -210,6 +211,10 @@ def metrics(_: None = Depends(protected)) -> dict:
         "proxy_rotations_total": proxy_stats["rotations_total"],
         "vision_calls_total": vision_engine.stats()["calls_total"],
         "vision_blocked_budget": vision_engine.stats()["blocked_budget"],
+        "agent_runs_total": _agent_stats["runs_total"],
+        "agent_steps_total": _agent_stats["steps_total"],
+        "agent_runs_done": _agent_stats["runs_done"],
+        "agent_runs_verified": _agent_stats["runs_verified"],
     }
 
 
@@ -387,15 +392,26 @@ def _with_browser_slot(callback):
         _browser_slots.release()
 
 
-def _agent_job(data: AgentTaskIn) -> dict:
+_agent_stats_lock = threading.Lock()
+_agent_stats = {"runs_total": 0, "steps_total": 0, "runs_done": 0, "runs_verified": 0}
+_job_cancel_lock = threading.Lock()
+_job_cancel: dict[str, threading.Event] = {}
+
+
+def _agent_job(data: AgentTaskIn, cancel: threading.Event) -> dict:
     from octopus_browser.agent import OctopusAgent
     from octopus_browser.core.launcher import BrowserController
 
     controller = BrowserController(config, profile_dir=profiles.get(data.profile))
     try:
         agent = OctopusAgent(config, controller)
-        result = agent.run(data.task, max_steps=data.max_steps)
-        return {"status": result.status, "steps": result.steps, "final_url": result.final_url, "log": result.log, "state": result.state.value, "request_id": correlation_id.get()}
+        result = agent.run(data.task, max_steps=data.max_steps, cancel=cancel, deadline_seconds=data.deadline_seconds)
+        with _agent_stats_lock:
+            _agent_stats["runs_total"] += 1
+            _agent_stats["steps_total"] += result.steps
+            _agent_stats["runs_done"] += 1 if result.status == "done" else 0
+            _agent_stats["runs_verified"] += 1 if result.verified else 0
+        return {"status": result.status, "steps": result.steps, "retries": result.retries, "recoveries": result.recoveries, "verified": result.verified, "final_url": result.final_url, "log": result.log, "state": result.state.value, "request_id": correlation_id.get()}
     finally:
         controller.stop()
 
@@ -403,9 +419,12 @@ def _agent_job(data: AgentTaskIn) -> dict:
 @app.post("/agent/jobs", status_code=202)
 def submit_agent_job(data: AgentTaskIn, _: None = Depends(protected)) -> dict:
     try:
-        job = _jobs.submit(lambda: _with_browser_slot(lambda: _agent_job(data)))
+        cancel = threading.Event()
+        job = _jobs.submit(lambda: _with_browser_slot(lambda: _agent_job(data, cancel)))
     except RuntimeError as exc:
         raise HTTPException(429, str(exc)) from exc
+    with _job_cancel_lock:
+        _job_cancel[job.id] = cancel
     return _job_view(job)
 
 
@@ -424,11 +443,21 @@ def get_agent_job(job_id: str, _: None = Depends(protected)) -> dict:
 
 @app.post("/agent/jobs/{job_id}/cancel")
 def cancel_agent_job(job_id: str, _: None = Depends(protected)) -> dict:
-    if not _jobs.get(job_id):
+    job = _jobs.get(job_id)
+    if not job:
         raise HTTPException(404, "Задача не найдена")
-    if not _jobs.cancel(job_id):
-        raise HTTPException(409, "Задача уже выполняется или завершена; принудительное убийство процесса не выполняется")
-    return {"cancelled": job_id}
+    if _jobs.cancel(job_id):
+        with _job_cancel_lock:
+            _job_cancel.pop(job_id, None)
+        return {"cancelled": job_id}
+    with _job_cancel_lock:
+        event = _job_cancel.get(job_id)
+    if job.status == "running" and event is not None:
+        event.set()
+        return {"cancelled": job_id, "mode": "cooperative"}
+    with _job_cancel_lock:
+        _job_cancel.pop(job_id, None)
+    raise HTTPException(409, "Задача уже выполняется или завершена; принудительное убийство процесса не выполняется")
 
 
 @app.post("/navigate")
