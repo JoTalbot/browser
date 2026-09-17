@@ -5,6 +5,29 @@
 
 ---
 
+## 🟢 Последняя запись (2026-09-17 — полный аудит: экспозиции, durability памяти, реестр секретов)
+
+- 🖥️ **Агент/машина:** Arena Agent Mode (arm-server-01, OCI, 129.213.177.56)
+- 🎯 **Шаг:** `step_90_full_audit` — владелец дал решения: P0 «сделать приватный / закрыть извне», P1 «делать всё», P2 «делай что надо», durability «делать всё», плюс «Октопус должен помнить все секреты — какие, зачем, откуда» и «можешь закрыть репо».
+- 📄 **Отчёты:** `/root/agents/-Octopus/reports/AUDIT_2026-09-17_full_ecosystem.md`, `AUDIT_2026-09-17_fixes_and_durability_plan.md`, `AUDIT_2026-09-17_durability_secrets_registry.md`
+- ✅ **Сделано (безопасность / экспозиции):**
+  - 🔒 Публичный HF-датасет `JoTalbot/octopus-eternal` (private=false, gated=false, 216 файлов, 34 462 скачивания, содержал 2.35 GB мастер-архив с `/etc/octopus/secrets.env`) **удалён** — перевести в private было нельзя (`403 exceed your private storage limit`); канал публикации переключён на приватный `JoTalbot/octopus-eternal-private`, публикация чанков на HF выключена по умолчанию.
+  - 🧱 noVNC `0.0.0.0:6080` (Docker-публикация в обход ufw, без пароля) закрыт: DROP в `DOCKER-USER` + идемпотентный юнит `octopus-firewall-hardening.service` (After=docker.service), ufw-правила удалены + deny, контейнер пересоздан на `127.0.0.1:6080/9222`; внешняя проверка 6080/9222 → таймаут.
+  - 🧹 `/etc/octopus`, `*.pem`, `*_token` исключены из мастер-архива снимка; хардкод HF-токена убран из `octopus-multisync.py`; в данных оркестратора редуктировано **43 секрета в 17 файлах** (бэкапы 64 MB, 0 сломанных JSON).
+- ✅ **Сделано (durability памяти):**
+  - 📦 Впервые создана **независимая off-host копия памяти**: packstore 45 файлов / 270.8 MB → OCI Object Storage `octopus-vault-immortal/packstore/` с sha256-манифестом и proof-of-read 5/5 (8.3 c, пик RAM 19.5 MB); юнит `octopus-packstore-offhost` переключён с мёртвого rsync-канала (targets=0: AWS-ноды `en=False`) на OCI.
+  - 📊 Аудит копий стал честным (`packstore_files=45, covered=45, coverage=1.0, pack_index_v2_refs=20524`): 0/0 больше не даёт coverage 1.0, креды Garage убраны из хардкода, запись атомарная.
+  - 🎯 SLO: добавлены чеки `packstore_offhost_copies` (P0), `packstore_offhost_sync_recent` (P1), `memory_copies_audit_fresh` (P2), исправлен ложно-зелёный `memory_independent_copy_coverage_1_0` → **18/18 PASS, green**.
+  - 💾 Снимок OCI Vault починен: `databases.sql` был 0 байт (`pg_dumpall -U postgres` от root → peer-auth denied), теперь `sudo -u postgres` + перенос → 18.3 MB; ротация/квота не считались (`list_objects` без `fields` → size=None) — исправлено, `packstore/` исключён из ротации; бакет 0.30 GB из 18 GB, 64 объекта.
+- ✅ **Сделано (реестр секретов — требование владельца):**
+  - 🔐 `/opt/octopus/secrets-registry/octopus-secrets-registry.py` → `/var/lib/octopus/secrets_registry.{json,md}` (600): **125 записей = 64 секрета + 61 служебная переменная, у всех секретов описано назначение**; значения не хранятся — только sha256[:12], длина, источник, first_seen, история смены отпечатка (ротации); `hunt` находит хардкод и связывает с реестром; ежедневный скан `octopus-secrets-registry.timer` (02:40); реестр реплицируется в OCI Vault.
+- 🧬 **Skill:** `skills/core/octopus-exposure-audit-2026-09-17` (SKILL.md + `code/check_public_exposure.py` + `tests/test_contract.py` + `references/incident_2026-09-17.md`) — контракт-тест 6/6, индекс пересобран (242 скилла, 0 stubs).
+- 🔍 **Как проверить:** `systemctl start octopus-packstore-offhost.service && cat /run/octopus/packstore_offhost.json`; `cat /run/octopus/memory_copies_audit.json`; `python3 /opt/octopus-slo-checker.py` → 18/18; `python3 /opt/octopus/secrets-registry/octopus-secrets-registry.py list`.
+- ⚠️ **Замечания:** Dependabot сообщает о **36 алертах в `JoTalbot/octopus` (3 critical: Next.js RCE ×2, next-auth bypass)**; локальная git-история `/opt/octopus` и `origin/main` **не имеют общего предка** (diff 3966 файлов) — склейка только по решению владельца; секреты подлежат ротации.
+- 🚀 **Что дальше:** ротация секретов → решение по git (3 варианта в отчёте) → апгрейд `next`/`next-auth` в Admin UI → restore-драйв packstore из OCI.
+
+---
+
 ## 🟢 Последняя запись (2026-09-08, Фаза 7 — evidence)
 
 - 🖥️ **Агент/машина:** Arena Agent (сервер arm-server-01, OCI, 129.213.177.56)
