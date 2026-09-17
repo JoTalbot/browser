@@ -67,3 +67,15 @@
 ## 9. Воспроизводимость
 - Skill: `skills/core/octopus-exposure-audit-2026-09-17` (алгоритм + `code/check_public_exposure.py` + `tests/test_contract.py` 6/6 + `references/incident_2026-09-17.md`).
 - Бэкапы всех изменённых файлов: `/root/backups/audit-2026-09-17/` (`.bak.<ts>`).
+
+## 10. Постскриптум того же дня (~06:15–06:25 UTC)
+- 🔴 Найден и закрыт **второй канал к noVNC**: `novnc8443.service` (socat `0.0.0.0:8443 → 172.17.0.2:6080`, запущен 03:42 UTC,
+  комментарий в юните «REMOVE AFTER CHAT EXPORT»). На момент находки `http://<host>:8443/vnc.html` отвечал `200` (15 KB) —
+  т.е. закрытие 6080 не закрывало доступ. Юнит остановлен + disabled + файл в бэкапы; ufw ALLOW 8443 (v4/v6) удалён, добавлен DENY;
+  `DOCKER-USER`: ровно по одному DROP на 6080 и 8443 (скрипт `/opt/octopus-firewall-hardening.sh` переписан на идемпотентный).
+  Внешняя проверка 6080/8443/9222 — недоступны, 22 отвечает.
+- 🟡 Хронический провал `octopus-integration-test.service` (не связан с аудитом, «4 pass, 4 fail» уже 16.09 12:15):
+  `127.0.0.1:9550` (DevPanel API) и `127.0.0.1:9087` (Nginx Status) никто не слушает — `octopus-devpanel-tunnel.service` disabled,
+  в конфигах nginx нет `stub_status`/`nginx_status`; `https://autosklo.org.ua/` за Cloudflare → `523 Origin Unreachable`.
+  Требует решения: поднять сервисы/статус-эндпоинт и оpиджин для CF либо скорректировать тест. Из-за этого SLO-чек
+  `no_octopus_failed_or_autorestart_units` красный (17/18) — не регрессия аудита.
