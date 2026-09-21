@@ -5,7 +5,53 @@
 
 ---
 
-## 🟢 Последняя запись (2026-09-21, шаг 110 — публичный контур: домен-монитор оказался заглушкой)
+## 🟢 Последняя запись (2026-09-21, шаг 111 — ночной сборщик мусора читал не тот журнал; пин-площадка стала видимой)
+
+- 🛡️ **Главное.** `octopus-immortal-gc.service` запускал `immortal.cli … gc --apply --min-age 86400`
+  **без** `EnvironmentFile=/etc/octopus/immortal-pg.env`. А `cli.py` выбирает БД так:
+  `db = os.environ.get("IMMORTAL_PG_DSN") or args.db`. Без env он брал `--db` =
+  `/var/lib/octopus/immortal/ledger.db` — **SQLite-журнал, оставшийся со времён до переезда на
+  Postgres**, тогда как живой `octopus-immortal.service` работает с Postgres. Цифры отчёта за
+  04:04 21.09 это подтверждают: `referenced` = disk1 13, disk2 7, oci 5, uguu 5, x0 7, ipfs 0 — это
+  ссылки из SQLite; в Postgres на тот момент disk1 6, disk2 6, oci 6, ipfs 2, uguu 3, x0 6.
+  Следствие: `deleted=11` за ночь — фрагменты, живые для Postgres, были удалены с дисков как
+  «сироты». **Именно это, а не «старая потеря», дало 3 недостающие копии на disk1/disk2/oci/uguu,
+  которые я нашёл вечером того же дня** (в записи шага 109 я назвал их старыми — неверно).
+- 🔄 **Что сделано сразу:** дроп-ин `/etc/systemd/system/octopus-immortal-gc.service.d/10-ledger-and-dryrun.conf` — `EnvironmentFile=/etc/octopus/immortal-pg.env`
+  (gc смотрит на тот же журнал, что и сервис) и `--apply` снят (режим отчёта). Проверено прогоном
+  юнита: `referenced` совпали с Postgres, `deleted=0`. Сам файл юнита не изменён, бэкап рядом.
+  Возвращать `--apply` можно только после сведения двух журналов в один: `tools/backup_ledger.py`
+  по-прежнему пишет снимки в SQLite (`DB = os.environ.get("IMM_DB") or …`), и его копии лежат в тех
+  же каталогах disk1/disk2 — при gc на Postgres они станут «сиротами».
+- 🤖 **Видимость пин-площадки.** `IpfsProvider.list_objects()` + `parse_pin_ls()`: Kubo 0.43 отвечает
+  одним JSON со словарём `Keys`, 0.25..0.30 — списком `[{"Cid": {"/": …}}]`, старые — потоком
+  строк; параметры читаются из **query-строки** и только на POST (form-body нода игнорирует: без
+  `?type=recursive` `pin/ls` отдаёт 726 записей вместо 179 — все indirect-пины).
+  `delete_object` = `pin rm`; «not pinned» — не отказ площадки; байты остаются до `repo gc`,
+  откат = `pin add` по списку.
+- 📊 **Первая в истории перепись:** 179 recursive-пинов, живых ссылок 2, сирот **177**: 170 —
+  каталожные корни эпохи битого `ipfs.put`, и **7 файлов на 5,6 МБ**, которые кому-то нужны.
+  Классификация чтением через сам провайдер (`/api/v0/object/stat` в 0.43 удалён), поэтому слепое
+  `--apply` не запускался: он снял бы эти 7. Отчёт и скрипт отката:
+  `/var/backups/immortal/ipfs-{pins,repin}-20260921T222038Z.json|.sh`.
+- 🧱 **Новое правило безопасности в `Store.gc`:** объекты, о которых провайдер не может сказать
+  возраст (`mtime == 0` — так отдаёт IPFS-пин, и так же у пары объектов в OCI пустой
+  `time_modified`), не удаляются, пока явно не передан `allow_unknown_age` (в CLI —
+  `--allow-unknown-age`). Причина: пин ставится раньше, чем в журнале появляется строка.
+  Побочный эффект, о котором надо знать: OCI-объекты с пустым `time_modified` теперь тоже берегутся
+  (сегодня это 2 штуки, которые прежний gc удалял).
+- 📚 **Заодно исправлено:** `/opt/octopus-ipfs-gc.sh` разыскивал контейнер
+  `octopus_ipfs_ipfs_node.1.wm61v638laaxiwsjfmmx8ky0w` (времен swarm), не находил, печатал
+  «SKIP: container not found» и выходил 0 — т.е. `repo gc` не выполнялся никогда, а юнит делал
+  вид, что работает. Теперь он говорит с API ноды, пишет `блоков/МБ/пинов` каждый запуск, а само
+  удаление требует `IMMORTAL_IPFS_REPO_GC=1` в `/etc/octopus/ipfs-gc.env` (сейчас 0).
+- 🧪 13 новых тестов, **138 passed** на SQLite и на Postgres. Бэкапы: `.bak.20260921T222038Z` у
+  `ipfs.py`, `store.py`, `cli.py`, `octopus-ipfs-gc.sh`, `octopus-immortal-gc.service`, STATUS.md,
+  STEP_STATUS.json, PROGRESS.md.
+- 🚀 **Что дальше:** свести `tools/backup_ledger.py` на Postgres (одна строка) и только потом
+  включать `--apply` обратно; решить, чьи 7 файловых пинов на ноде; `degraded/lost` по-прежнему 0.
+
+### 📜 2026-09-21, шаг 110 — публичный контур: домен-монитор оказался заглушкой
 
 - 🛡️ **Что нашли:** `/opt/octopus-domain-monitor.sh` был **заглушкой на 8 строк** — он дописывал
   в `/var/log/octopus-tg-suppressed.log` строку «policy: direct_chat_push_disabled_wave2» и выходил
